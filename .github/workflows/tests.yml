@@ -69,5 +69,14 @@ jobs:
           node-version: '22'
       - name: 安装 Playwright（Edge 使用镜像自带的浏览器）
         run: npm install --no-save --no-package-lock playwright@1.63.0
-      - name: tests/update-reload.cjs
-        run: node tests/update-reload.cjs
+      - name: tests/update-reload.cjs（原地更新后保持扩展 ID 与本地数据）
+        run: |
+          if [ ! -f tests/update-reload.cjs ]; then
+            echo "::warning::tests/update-reload.cjs 不在本分支（原地更新专项测试仍在开发中），本次跳过。该文件进入 main 后会自动纳入，无需改动本工作流。"
+            {
+              echo "### 原地更新专项测试：未执行"
+              echo "tests/update-reload.cjs 不在本分支，已跳过。合并该文件后本 job 会自动运行它。"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node tests/update-reload.cjs
