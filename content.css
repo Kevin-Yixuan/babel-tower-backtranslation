@@ -1,0 +1,15 @@
+/* 页面级样式（integration 独占）：帖内入口、Jev 折叠条、选区条。侧栏样式在 sidebar/sidebar.css。 */
+.bx-entry{border:1px solid #769a80!important;background:#edf3ed!important;color:#2c6247!important;border-radius:99px!important;padding:4px 9px!important;margin-left:8px!important;font-size:11px!important;line-height:1.4!important;white-space:nowrap!important;min-width:0!important}
+.bx-entry:hover{background:#dcebdd!important}
+.bx-entry-reply{border-color:#c9b287!important;background:#faf3e6!important;color:#7a5c24!important}
+.bx-entry-reply:hover{background:#f3e8d4!important}
+.bx-entries{display:inline-flex;gap:6px;align-items:center;vertical-align:middle}
+#bx-selection-bar{position:fixed;z-index:2147483645;display:none;background:#153f32;border-radius:8px;padding:4px;box-shadow:0 7px 25px #0d302044}
+#bx-selection-bar.bx-show{display:flex}
+#bx-selection-bar button{border:0;background:transparent;color:white;padding:6px 9px;font-size:11px;cursor:pointer;font:inherit}
+#bx-selection-bar button:hover{background:#376a51;border-radius:5px}
+.bx-collapsed{min-height:50px!important}
+.bx-collapsed>:not(.bx-collapse-bar){display:none!important}
+.bx-collapse-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 17px;background:#eaf0e9;color:#3f654d;font-size:12px}
+.bx-collapse-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bx-collapse-bar button{border:1px solid #abc2ad;background:white;color:#285d3d;border-radius:6px;padding:3px 8px;white-space:nowrap;font-size:11px;cursor:pointer;font:inherit}

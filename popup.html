@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>巴别塔（回译）</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="mdx/dictionary-panel.css">
+  <script type="module" src="popup.js"></script>
+</head>
+<body>
+  <header class="header"><span class="logo">回</span><div><h1>巴别塔（回译）</h1><p>读懂世界，写出自己的话。</p></div></header>
+  <nav class="tabs" aria-label="插件设置"><button data-tab="home" class="active">开始</button><button data-tab="filters">Jev 筛选</button><button data-tab="saved">收藏</button><button data-tab="dictionary">词表</button></nav>
+  <main>
+    <section data-panel="home">
+      <div class="intro"><h2>在 X 页面直接使用</h2><p>点击帖子下的「翻译／回复」打开并排侧栏：自动翻译、查词、讲解、收藏，或用中文想法生成跨语言回复。关闭后右下角小把手可再打开。</p></div>
+      <div class="field"><a class="secondary w-open-workbench" href="writing.html" target="_blank" rel="noopener">打开自由写作工作台 ↗</a><small>独立长文页面：草稿自动保存、参考文章学习、分层反馈</small></div>
+      <div class="field"><label for="target-language">默认目标语言</label><select id="target-language"><option>英语</option><option>西班牙语</option><option>日语</option><option>法语</option><option>德语</option><option>葡萄牙语</option><option>韩语</option><option>阿拉伯语</option></select></div>
+      <div class="field"><label for="model-provider">模型服务商</label><select id="model-provider"><option value="openai">OpenAI</option><option value="deepseek">DeepSeek</option><option value="mimo">MiMo V2.6 Flash</option><option value="glm">GLM</option></select></div>
+      <div class="field"><label for="provider-base-url">Base URL</label><input id="provider-base-url" spellcheck="false" placeholder="https://api.deepseek.com/v1"><small>OpenAI 兼容地址；以 https:// 开头</small></div>
+      <div class="field"><label for="provider-model">模型名</label><input id="provider-model" spellcheck="false" placeholder="deepseek-flash"><small>留空或无效会用官方默认；DeepSeek 旧默认 deepseek-chat 已于 2026-07-24 停用，已自动迁移</small></div>
+      <div class="field"><label for="provider-key">API Key <small>用于翻译、语法讲解和表达检查</small></label><input id="provider-key" type="password" autocomplete="off" placeholder="在服务商控制台获取"></div>
+      <div class="test-row"><button type="button" id="test-model" class="secondary">测试连接</button><span id="test-result" role="status"></span></div>
+      <div class="privacy">打开「翻译」页签或选句进入阅读时，当前帖文或文章段落会自动发往所选模型，可能消耗你的模型额度；点击生成、检查或讲解时也会发送相应上下文与输入。OpenAI 请求设为 store: false；其他服务商的留存规则以其说明为准。密钥仅保存在此浏览器的扩展本地存储，不会同步或写入 X。</div>
+      <button class="primary" id="save-main">保存写作设置</button>
+    </section>
+    <section data-panel="filters" hidden>
+      <div class="intro"><h2>用自然语言过滤</h2><p>写下想折叠的帖子类型。Jev 只判断是否命中规则；不确定时保持原帖可见，折叠后可随时展开。</p></div>
+      <label class="switch-row"><span><b>启用筛选</b><small>处理你当前能看到、滚动到附近的帖子</small></span><input id="filter-enabled" type="checkbox"></label>
+      <div class="field"><label for="jev-key">TypeSafe Jev API Key</label><input id="jev-key" type="password" autocomplete="off" placeholder="在 TypeSafe 控制台获取"></div>
+      <div class="rules-title"><h3>我的规则</h3><button id="add-rule">＋ 添加</button></div>
+      <div id="rules"></div>
+      <p class="hint">可以写“折叠只为引战、没有实质信息的帖子”，也可以写某个主题。最多 8 条。</p>
+      <div class="field"><label for="filter-threshold">匹配把握：<span id="threshold-label">82%</span></label><input id="filter-threshold" type="range" min="65" max="98" value="82"><small>越高越谨慎。模糊匹配不会折叠。</small></div>
+      <div class="field"><label for="filter-limit">每日最多 API 请求</label><input id="filter-limit" type="number" min="10" max="200" value="80"><small>按实际发出的请求数硬性封顶（含失败与自动重试）</small></div>
+      <div class="diagnostics-box"><div class="rules-title"><h3>Jev 诊断</h3><button type="button" id="refresh-jev" class="secondary">刷新</button></div><div id="jev-diagnostics">加载中……</div></div>
+      <div class="privacy">开启后，附近帖子文字与规则会直接发往 TypeSafe，包括你能看到的受保护账号帖子。插件无中转服务器；命中后仍可展开。</div>
+      <button class="primary" id="save-filter">保存筛选设置</button>
+    </section>
+    <section data-panel="saved" hidden>
+      <div class="intro"><h2>存下能再次使用的表达</h2><p>句型、结构和词语只保存在本机。点击原帖链接可回到语境。</p></div>
+      <div id="saved-list"></div>
+      <button id="export-saved" class="secondary">导出收藏 JSON</button>
+    </section>
+    <section data-panel="dictionary" hidden>
+      <div class="intro"><h2>取词不必用大模型</h2><p>按「本地词表 → 本地 MDX 词典 → 在线」的顺序查词；在线查询会把单词发给 MyMemory 与 Free Dictionary API。</p></div>
+      <div class="dictionary-box"><b id="glossary-count">尚未导入本地词表</b><p>支持 TSV、CSV 或 JSON，格式为“单词 + 释义”。导入新文件会替换旧词表。</p><label class="file-button" for="glossary-file">选择词表文件</label><input id="glossary-file" type="file" accept=".tsv,.csv,.json,.eubak,text/plain,application/json" hidden></div>
+      <div class="dictionary-box"><b>本地 MDX 词典（离线）</b><p>导入 MDict <code>.mdx</code>（如 LDOCE5）后完全离线查词；重新导入时旧词库全程可查（原子切换）。大词典建议点按钮在独立标签页导入——弹窗关闭不会中断。</p><button type="button" id="open-mdx-import" class="secondary">打开独立导入页 ↗</button></div>
+      <div id="mdx-root"></div>
+      <div class="privacy">MDX 解析与索引全部在本机 IndexedDB 完成，词库文件不上传、不进安装包、不发给模型。在线兜底查询会把单词发送给 MyMemory 与 Free Dictionary API。你提供的 `.eubak` 只是指向 `.mdx` 的配置，本身不含词条。</div>
+    </section>
+  </main>
+  <div id="status" role="status" aria-live="polite"></div>
+  <footer>巴别塔（回译）· 本地优先 · 插入草稿后由你确认发布</footer>
+</body>
+</html>

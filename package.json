@@ -1,0 +1,10 @@
+{
+  "name": "backwrite-x",
+  "version": "0.2.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/core.test.mjs tests/writing.test.mjs tests/ripemd.test.mjs tests/mdx-html.test.mjs tests/mdx-pipeline.test.mjs tests/release.test.mjs",
+    "test:browser": "node tests/smoke.cjs && node tests/writing-smoke.cjs && node tests/adversarial-smoke.cjs && node tests/workbench-smoke.cjs && node tests/timeline.cjs && node tests/jev-adversarial.cjs && node tests/dictionary-wiring.cjs && node tests/reading-smoke.cjs && node tests/reply-smoke.cjs && node tests/growth-logic.cjs && node tests/growth-smoke.cjs && node tests/discovery-smoke.cjs && node tests/release-regressions.cjs"
+  }
+}

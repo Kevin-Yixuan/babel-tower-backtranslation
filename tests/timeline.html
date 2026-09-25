@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>本地动态时间线仿真 · 回译 X</title></head>
+<body>
+<main id="feed"></main>
+<section><div data-testid="tweetTextarea_0" contenteditable="true" role="textbox" aria-label="Post text"></div></section>
+<script>
+  // Local simulation of X's virtualized timeline: dynamic loads + node reuse.
+  const feed = document.getElementById('feed');
+  function makeArticle(post) {
+    const article = document.createElement('article');
+    article.setAttribute('data-testid', 'tweet');
+    article.innerHTML =
+      '<div data-testid="User-Name">' + post.author + '<br>@' + post.handle + '</div>' +
+      '<div data-testid="tweetText">' + post.text + '</div>' +
+      '<a href="/' + post.handle + '/status/' + post.id + '">now</a>' +
+      '<div role="group"><button>Reply</button></div>';
+    return article;
+  }
+  const POST1 = {
+    author: 'Flame Wars', handle: 'flamer', id: '1001',
+    text: 'This is pure flame bait: everyone who disagrees is an idiot and should shut up forever, no nuance allowed.'
+  };
+  const POST2 = {
+    author: 'Signal', handle: 'signal', id: '1002',
+    text: 'Flame in the kitchen: cooking with gas requires patience, and most people rush the sear step when they should wait.'
+  };
+  const POST3 = {
+    author: 'Dynamic', handle: 'loader', id: '1003',
+    text: 'Dynamically appended post after load — the scanner must pick up nodes that appear without a page refresh.'
+  };
+  const POST4 = {
+    author: 'Recycled', handle: 'reuser', id: '1004',
+    text: 'This tweet replaced POST1 inside the same DOM node — the filter must detect node reuse and re-run for new content.'
+  };
+  const POST_FAIL = {
+    author: 'Broken', handle: 'alwaysfail', id: '1005',
+    text: 'always-fail post: the mock Jev endpoint always returns HTTP 500 for this content, so retries must exhaust and the error must be recorded.'
+  };
+  const node1 = makeArticle(POST1);
+  feed.append(node1, makeArticle(POST2));
+  // dynamic load
+  setTimeout(() => feed.append(makeArticle(POST3)), 500);
+  setTimeout(() => feed.append(makeArticle(POST_FAIL)), 700);
+  // node reuse: X virtualization re-targets node1 to a different tweet
+  setTimeout(() => {
+    node1.innerHTML =
+      '<div data-testid="User-Name">' + POST4.author + '<br>@' + POST4.handle + '</div>' +
+      '<div data-testid="tweetText">' + POST4.text + '</div>' +
+      '<a href="/' + POST4.handle + '/status/' + POST4.id + '">now</a>' +
+      '<div role="group"><button>Reply</button></div>';
+  }, 1200);
+</script>
+</body>
+</html>

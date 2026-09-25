@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>自由写作 · 巴别塔（回译）</title>
+  <link rel="stylesheet" href="writing.css">
+  <script type="module" src="writing.js"></script>
+</head>
+<body>
+  <header class="w-head">
+    <a class="w-logo" href="popup.html" title="返回插件设置">回</a>
+    <div class="w-titles"><h1>自由写作工作台</h1><p>从空白开始写英文；参考文章与草稿分别最多 20,000 字符，超限会明确提示，不会静默截断。</p></div>
+    <div class="w-head-actions">
+      <span id="w-save-state" class="w-save-state" role="status" aria-live="polite">尚未修改</span>
+      <button id="w-cancel" type="button" class="w-btn" hidden>取消等待</button>
+      <button id="w-new" type="button" class="w-btn">新建草稿</button>
+    </div>
+  </header>
+
+  <div class="w-layout">
+    <aside class="w-side" aria-label="草稿列表">
+      <div class="w-side-title">我的草稿 <small id="w-draft-count"></small></div>
+      <ul id="w-draft-list"></ul>
+      <div class="w-actions"><button id="w-export" type="button" class="w-btn">导出全部草稿 JSON</button></div>
+      <p class="w-hint">自动保存在本机浏览器，最多 20 篇；满额时会阻止新建，不会静默删除旧稿。关闭页面再打开会恢复。</p>
+    </aside>
+
+    <main class="w-main">
+      <section class="w-block">
+        <div class="w-block-head">
+          <label class="w-label" for="w-title">标题（可选）</label>
+          <input id="w-title" type="text" placeholder="例如：A note on writing" maxlength="120">
+        </div>
+
+        <div class="w-block-head">
+          <label class="w-label" for="w-body">我的英文草稿</label>
+          <span id="w-body-count" class="w-count">0 / 20,000</span>
+        </div>
+        <textarea id="w-body" placeholder="从空白开始写英文……" spellcheck="true"></textarea>
+        <label class="w-authored"><input id="w-authored" type="checkbox">我确认这篇正文是自己写的；只有确认后的稿件才会进入「成长」记忆。修改正文后需重新确认。</label>
+        <div class="w-actions">
+          <button id="w-check" type="button" class="w-primary">分层反馈：检查我的写作</button>
+          <button id="w-clear" type="button" class="w-btn">清空本稿</button>
+        </div>
+      </section>
+
+      <section class="w-block">
+        <div class="w-block-head">
+          <label class="w-label" for="w-reference">参考文章（可选，英文）</label>
+          <span id="w-ref-count" class="w-count">0 / 20,000</span>
+        </div>
+        <textarea id="w-reference" placeholder="粘贴英文长文（支持 5,000 字符以上）作为参考……" spellcheck="true"></textarea>
+        <p class="w-hint">正文与参考材料分别最多 20,000 字符；超限会明确报错并完整保留输入。<b>当前没有自动分段</b>，请自行拆分后分次提交。</p>
+        <div class="w-actions">
+          <button id="w-learn" type="button" class="w-primary">学习这篇文章的表达</button>
+        </div>
+        <div id="w-learn-results" class="w-results" hidden></div>
+      </section>
+
+      <section class="w-block" id="w-feedback-block" hidden>
+        <div class="w-label">分层反馈</div>
+        <div id="w-feedback"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="w-status" role="status" aria-live="polite"></div>
+</body>
+</html>

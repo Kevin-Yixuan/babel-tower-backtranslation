@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>导入本地词典 · 巴别塔（回译）</title>
+  <link rel="stylesheet" href="dictionary-panel.css">
+  <style>
+    body{margin:0;padding:26px;font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei",sans-serif;background:#fbfaf6;color:#203c30}
+    .wrap{max-width:600px;margin:0 auto}
+    h1{font:600 21px Georgia,"Songti SC",serif;margin:0 0 5px}
+    .lead{margin:0 0 20px;color:#718075;font-size:12px;line-height:1.7}
+    .note{margin:18px 0 0;padding:12px 14px;border-left:3px solid #b99e71;background:#f4f2e9;border-radius:0 8px 8px 0;color:#6b6350;font-size:11px;line-height:1.7}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>导入本地 MDX 词典</h1>
+    <p class="lead">
+      选择一个 <code>.mdx</code> 文件，在本机完成解析并写入浏览器本地索引。
+      导入后查词不再联网。大词典导入需要几分钟，请保持这个标签页打开。
+    </p>
+    <div id="root"></div>
+    <p class="note">
+      词典文件只在本机读取：不上传、不进入 Git、不随插件打包。
+      索引保存在当前浏览器的 IndexedDB 里，删除插件数据即一并清除。
+    </p>
+  </div>
+  <!-- External file on purpose: MV3 extension pages block inline scripts (script-src 'self'). -->
+  <script type="module" src="./import.js"></script>
+</body>
+</html>

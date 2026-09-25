@@ -1,0 +1,38 @@
+/* Styles for the local MDX dictionary panel. Scoped to .mdx-panel so it can be dropped
+   into the existing popup without disturbing the rest of the layout. */
+.mdx-panel{display:flex;flex-direction:column;gap:14px;font-size:12px;color:#203c30}
+.mdx-panel h2{font:600 15px Georgia,"Songti SC",serif;margin:0 0 6px}
+.mdx-panel h3{margin:0}
+.mdx-block{padding:13px 14px;border:1px solid #dfe6df;border-radius:10px;background:#fff}
+.mdx-muted{margin:0 0 9px;color:#7b897d;font-size:11px;line-height:1.6}
+.mdx-panel input[type=file],.mdx-mode,.mdx-search{display:block;width:100%;margin:7px 0;border:1px solid #d5dfd5;border-radius:7px;background:#fff;padding:8px 9px;font:inherit;color:#203c30}
+.mdx-search-row{display:flex;gap:7px}
+.mdx-search-row .mdx-search{flex:1;margin:0}
+.mdx-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.mdx-primary,.mdx-secondary{border-radius:7px;padding:8px 12px;font:inherit;cursor:pointer}
+.mdx-primary{border:1px solid #1d4b38;background:#1d4b38;color:#fff}
+.mdx-secondary{border:1px solid #b9c6ba;background:#fff;color:#2b4a39}
+.mdx-primary:disabled{opacity:.55;cursor:default}
+.mdx-progress{margin-top:10px}
+.mdx-progress-track{height:7px;border-radius:4px;background:#e8efe9;overflow:hidden}
+.mdx-progress-bar{height:100%;width:0;background:#275941;transition:width .18s linear}
+.mdx-progress-text{display:block;margin-top:5px;color:#67796b;font-size:11px}
+.mdx-status{margin:0;color:#37543f;font-size:11px;line-height:1.6}
+.mdx-error{margin:0;padding:9px 11px;border-left:3px solid #a6483c;background:#fbeeec;border-radius:0 7px 7px 0;color:#8a3529;font-size:11px;line-height:1.6}
+.mdx-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.mdx-chip{border:1px solid #cfdcd0;background:#f4f8f4;border-radius:20px;padding:4px 10px;font:inherit;font-size:11px;color:#275941;cursor:pointer}
+.mdx-nav{display:flex;gap:7px;margin:8px 0}
+.mdx-entry{border-top:1px solid #e6ece6;padding-top:11px}
+.mdx-headword{font:600 16px Georgia,"Songti SC",serif}
+.mdx-pron{margin-left:7px;color:#7b897d;font-size:11px}
+.mdx-sense{margin:11px 0;padding-left:9px;border-left:2px solid #d9e4da}
+.mdx-pos{display:inline-block;margin-bottom:3px;color:#a1671f;font-size:11px;font-weight:700}
+.mdx-def{margin:2px 0;font-size:13px;line-height:1.7}
+.mdx-def-en{margin:2px 0;color:#5c6f60;font-size:12px;line-height:1.6}
+.mdx-example{margin:3px 0 3px 11px;color:#3d5b48;font-size:12px;line-height:1.6}
+.mdx-example::before{content:"例：" ; color:#8b968e}
+.mdx-hop{margin:0 0 7px;color:#a1671f;font-size:11px}
+.mdx-notice{margin:9px 0 0;padding:8px 10px;border-left:3px solid #b99e71;background:#f4f2e9;border-radius:0 7px 7px 0;color:#6b6350;font-size:11px;line-height:1.6}
+.mdx-original{margin-top:11px;padding-top:9px;border-top:1px dashed #e0e7e0;color:#3d5b48;line-height:1.7}
+.mdx-missing-media{color:#8b968e;font-size:11px}
+.mdx-empty{margin:9px 0;color:#718075}

@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>本地词典导入 · 本地验证页</title>
+  <link rel="stylesheet" href="../mdx/dictionary-panel.css">
+  <style>
+    body{margin:0;padding:22px;font-family:-apple-system,"Microsoft YaHei",sans-serif;background:#fbfaf6;color:#203c30}
+    .wrap{max-width:560px;margin:0 auto}
+    h1{font:600 20px Georgia,"Songti SC",serif;margin:0 0 4px}
+    .lead{margin:0 0 18px;color:#718075;font-size:12px}
+    #log{margin-top:18px;padding:12px 14px;background:#fff;border:1px solid #dfe6df;border-radius:10px;font:11px/1.7 ui-monospace,Consolas,monospace;color:#4a6152;white-space:pre-wrap;max-height:280px;overflow:auto}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>本地 MDX 词典 · 离线验证页</h1>
+    <p class="lead">只在本地页面运行，不访问 X。选一个 .mdx 文件后导入，索引写进本页的 IndexedDB。</p>
+    <div id="root"></div>
+    <div id="log" aria-live="polite"></div>
+  </div>
+  <script type="module">
+    import { mountDictionaryPanel } from '../mdx/dictionary-panel.js';
+    const log = document.querySelector('#log');
+    const write = text => { log.textContent += `${new Date().toLocaleTimeString('zh-CN')}  ${text}\n`; window.__log = (window.__log || '') + text + '\n'; };
+    const panel = mountDictionaryPanel(document.querySelector('#root'), {
+      onStatusChange: (text, isError) => { if (text) write(`${isError ? '错误' : '状态'}：${text}`); }
+    });
+    window.__panel = panel;
+    window.__ready = true;
+  </script>
+</body>
+</html>

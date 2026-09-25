@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "巴别塔（回译）· X 跨语言阅读与表达",
+  "short_name": "巴别塔（回译）",
+  "version": "0.2.1",
+  "description": "在 X 上查词、理解句子、回译练习，并用自己的语言写回复。",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://api.dictionaryapi.dev/*",
+    "https://api.mymemory.translated.net/*",
+    "https://api.openai.com/*",
+    "https://api.typesafe.ai/*",
+    "https://api.deepseek.com/*",
+    "https://open.bigmodel.cn/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": [
+        "sidebar/sidebar.js",
+        "modules/reading/reading.js",
+        "modules/reply/reply.js",
+        "modules/practice/practice.js",
+        "modules/growth/growth.js",
+        "modules/discovery/discovery.js",
+        "content.js"
+      ],
+      "css": ["sidebar/sidebar.css", "content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "巴别塔（回译）", "default_popup": "popup.html" }
+}

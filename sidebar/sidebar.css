@@ -1,0 +1,88 @@
+/* 侧栏骨架样式（integration 独占）。由旧浮层面板改造：右固定、打开时页面整体右移，与网页并排不遮挡。 */
+:root, html { --bx-side-w: 430px; }
+#bx-sidebar,#bx-sidebar *{box-sizing:border-box}
+#bx-sidebar{position:fixed!important;top:0!important;right:0!important;bottom:0!important;width:min(var(--bx-side-w),100vw)!important;z-index:2147483646!important;transform:translateX(105%);transition:transform .2s ease;background:#fcfbf7!important;color:#20392f!important;box-shadow:-14px 0 42px #0e2f2540;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Microsoft YaHei",sans-serif!important;display:flex;flex-direction:column}
+#bx-sidebar.bx-open{transform:translateX(0)}
+/* 打开时把页面内容整体左让，侧栏与网页并排（不覆盖正文）。 */
+html.bx-sidebar-on{overflow-x:hidden}
+html.bx-sidebar-on body{margin-right:var(--bx-side-w)!important}
+#bx-sidebar button,#bx-sidebar-handle button,.bx-entry,.bx-collapse-bar button{font:inherit;cursor:pointer}
+#bx-sidebar button:disabled{opacity:.45;cursor:not-allowed}
+#bx-sidebar .bx-head{height:66px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 20px;border-bottom:1px solid #e1e5dd;flex:none}
+.bx-brand{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:700}
+.bx-brand small{display:block;color:#75857a;font-size:10px;font-weight:400}
+.bx-mark{background:#17483a;color:white;width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font-family:serif;font-size:22px}
+#bx-close{border:0;background:transparent;color:#687e70;font-size:26px!important;line-height:1}
+#bx-sidebar .bx-tabs{padding:8px 15px;display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid #e1e5dd;flex:none}
+#bx-sidebar .bx-tabs button{border:0;background:transparent;border-radius:7px;padding:8px 10px;color:#718177;font-size:12px;flex:1 1 auto}
+#bx-sidebar .bx-tabs button.bx-active{background:#e7eee8;color:#17483a;font-weight:700}
+#bx-body{overflow:auto;flex:1}
+#bx-sidebar .bx-section{padding:22px 20px 34px}
+#bx-sidebar .bx-kicker{color:#769282;letter-spacing:1.6px;font-size:10px;font-weight:700;text-transform:uppercase}
+#bx-sidebar h2{font:500 22px/1.4 Georgia,"Songti SC",serif;color:#173f34;margin:5px 0 12px}
+#bx-sidebar blockquote{margin:0 0 18px;padding:15px;border-left:3px solid #c59e69;background:#f3f2e9;border-radius:0 8px 8px 0;white-space:pre-wrap;max-height:190px;overflow:auto;font-size:14px}
+#bx-sidebar .bx-actions{display:flex;gap:8px;margin:14px 0 18px;flex-wrap:wrap}
+#bx-sidebar .bx-actions button,#bx-sidebar button.bx-wide{background:#fff;border:1px solid #cbd7cc;color:#214b3d;border-radius:8px;padding:8px 12px;min-height:36px}
+#bx-sidebar button.bx-primary{background:#194a3b;color:#fff;border:1px solid #194a3b}
+#bx-sidebar button.bx-wide{display:block;width:100%;margin:12px 0 19px}
+#bx-sidebar .bx-field{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+#bx-sidebar .bx-field label,#bx-sidebar .bx-label{font-size:12px;color:#526d5d;font-weight:700}
+#bx-sidebar .bx-label{display:block;margin:20px 0 7px}
+#bx-sidebar input,#bx-sidebar select,#bx-sidebar textarea{width:100%;background:#fff;border:1px solid #d2dcd2;border-radius:8px;color:#20392f;padding:10px 11px;outline:0}
+#bx-sidebar input:focus,#bx-sidebar select:focus,#bx-sidebar textarea:focus{border-color:#57806b;box-shadow:0 0 0 3px #e5eee6}
+#bx-sidebar textarea{resize:vertical;min-height:112px;font-size:14px;line-height:1.7}
+#bx-sidebar .bx-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#bx-sidebar .bx-subtle{font-size:12px;color:#718076;margin:4px 0 16px}
+#bx-sidebar .bx-result,#bx-sidebar .bx-feedback{border:1px solid #dce3d9;border-radius:10px;background:#fff;padding:14px;margin-top:15px}
+#bx-sidebar .bx-result-title{font-size:16px;font-weight:700;color:#1a4637}
+#bx-sidebar .bx-result-title small{font-weight:400;color:#77857a}
+#bx-sidebar .bx-result p{margin:9px 0;font-size:13px}
+#bx-sidebar .bx-result a,#bx-sidebar .bx-saved-card a{display:block;font-size:12px;color:#436e57;margin-top:10px}
+#bx-sidebar .bx-explanation{white-space:pre-wrap}
+#bx-sidebar .bx-quiet{background:#f6f5ef}
+#bx-sidebar .bx-prompt{background:#eff3ed;border:1px solid #d9e4d9;border-radius:10px;padding:17px;margin:17px 0}
+#bx-sidebar .bx-prompt small{color:#6f8075}
+#bx-sidebar .bx-prompt p{font:500 18px/1.8 Georgia,"Songti SC",serif;margin:7px 0}
+#bx-sidebar .bx-prompt span{font-size:11px;color:#4e725e}
+#bx-sidebar .bx-feedback>p{font-size:13px}
+#bx-sidebar .bx-feedback-item{padding:12px 0;border-top:1px solid #e6eae4}
+#bx-sidebar .bx-feedback-item b{font-size:12px;margin-left:7px}
+#bx-sidebar .bx-feedback-item p{font-size:12px;margin:5px 0}
+#bx-sidebar .bx-feedback-item small{font-size:11px;color:#748177}
+#bx-sidebar .bx-kind{font-size:10px;padding:3px 6px;border-radius:4px}
+.bx-kind.bx-fix{color:#a84e43;background:#fae9e5}
+.bx-kind.bx-polish{color:#966c32;background:#faefdf}
+.bx-kind.bx-keep{color:#387259;background:#e8f3eb}
+#bx-sidebar .bx-reference{border-top:1px solid #dce4da;margin-top:18px;padding-top:12px}
+#bx-sidebar .bx-reference summary{cursor:pointer;color:#325e46;font-size:12px}
+#bx-sidebar .bx-reference p{font-family:Georgia,serif;line-height:1.7}
+#bx-sidebar .bx-context{padding:10px 12px;background:#f1f2eb;border-radius:7px;color:#63766a;font-size:12px;max-height:100px;overflow:auto}
+#bx-sidebar .bx-saved-card{padding:14px;border:1px solid #dce4da;background:#fff;border-radius:9px;margin:10px 0}
+#bx-sidebar .bx-saved-card span{font-size:10px;color:#688771}
+#bx-sidebar .bx-saved-card p{white-space:pre-wrap;margin:7px 0}
+#bx-sidebar .bx-saved-card small{display:block;color:#7d887f}
+#bx-sidebar .bx-empty{padding:35px 12px;text-align:center;color:#75847b;background:#f2f4ee;border-radius:9px;font-size:12px}
+#bx-sidebar .bx-status{padding:11px 12px;border-radius:7px;margin-top:15px;font-size:12px}
+#bx-sidebar .bx-error{background:#fff0e9;color:#9b4e39}
+#bx-sidebar .bx-loading{background:#edf3ef;color:#386a50;display:flex;align-items:center;gap:9px}
+.bx-spinner{width:14px;height:14px;border:2px solid #b6c9b9;border-top-color:#24513c;border-radius:50%;animation:bx-spin .7s linear infinite}
+@keyframes bx-spin{to{transform:rotate(360deg)}}
+#bx-sidebar .bx-foot{padding:10px 18px;border-top:1px solid #e0e5df;color:#849087;font-size:10px;flex:none}
+#bx-sidebar .bx-chinese{font-size:17px;color:#224d36;margin:8px 0}
+#bx-sidebar .bx-count{display:block;text-align:right;font-size:11px;color:#7d8b81;margin:-6px 2px 10px}
+#bx-sidebar .bx-count-over{color:#a84e43;font-weight:700}
+#bx-sidebar .bx-ok{background:#eaf5ee;color:#2f6a44}
+#bx-sidebar .bx-actions-tight{margin:8px 0 2px}
+#bx-cancel-request{margin-left:8px;border:1px solid #9dbbab;background:#fff;color:#1d4b38;border-radius:6px;padding:3px 9px;font-size:11px}
+.bx-insert-confirm{border:1px solid #c9b287;background:#fdf8ee;border-radius:10px;padding:13px 14px;margin:12px 0}
+.bx-insert-blocked{border-color:#d9b0a5;background:#fdf3ef}
+.bx-insert-confirm p{margin:4px 0;font-size:13px}
+.bx-insert-confirm b{color:#6b5426}
+.bx-candidate{border:1px solid #b9c9d9;background:#f2f7fc;border-radius:10px;padding:13px 14px;margin:12px 0}
+.bx-candidate p{white-space:pre-wrap;font-size:13px;margin:8px 0;max-height:140px;overflow:auto}
+.bx-candidate small{display:block;color:#5d7183;margin-bottom:6px}
+/* 关闭侧栏后右下角的小把手（替代旧的整条 FAB 入口；不遮挡正文） */
+#bx-sidebar-handle{position:fixed;right:0;bottom:96px;z-index:2147483644;border:1px solid #3a6a4a;border-radius:8px 0 0 8px;padding:10px 7px;background:#1b4938;color:#fff;box-shadow:0 7px 22px #143f3055;font-size:12px;writing-mode:vertical-rl;letter-spacing:2px}
+html.bx-sidebar-on #bx-sidebar-handle{display:none}
+@media(max-width:480px){:root,html{--bx-side-w:100vw}#bx-sidebar-handle{bottom:48px;font-size:11px}}
+@media(prefers-reduced-motion:reduce){#bx-sidebar{transition:none}.bx-spinner{animation:none}}
