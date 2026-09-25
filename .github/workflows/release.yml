@@ -1,0 +1,173 @@
+name: Release community preview
+
+# 合并到 main 后自动发布社群预览版：测试全绿 → 构建 ZIP 与 SHA-256 → 校验 → 建 Release。
+# 手动触发时默认 dry_run，只构建不发布，用来验证流水线本身。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只构建并校验，不创建 tag / Release'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    name: 测试（失败即阻止发布）
+    uses: ./.github/workflows/tests.yml
+
+  build:
+    name: 构建并校验发布包
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      zip: ${{ steps.meta.outputs.zip }}
+      checksum: ${{ steps.meta.outputs.checksum }}
+      sha256: ${{ steps.meta.outputs.sha256 }}
+      files: ${{ steps.meta.outputs.files }}
+      bytes: ${{ steps.meta.outputs.bytes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 构建 ZIP 与 SHA-256
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          gate=fail
+          if [ "$DRY_RUN" = "true" ]; then gate=warn; fi
+          node scripts/build-package.mjs --out dist --version-gate="$gate"
+      - name: 校验发布包
+        run: |
+          version=$(node -p "require('./dist/package-report.json').version")
+          echo "构建版本 $version"
+          node scripts/verify-package.mjs "dist/babel-tower-backtranslation-$version.zip" --tag "v$version"
+      - name: 汇总元数据
+        id: meta
+        run: |
+          report=./dist/package-report.json
+          version=$(node -p "require('$report').version")
+          {
+            echo "version=$version"
+            echo "tag=v$version"
+            echo "zip=$(node -p "require('$report').zip")"
+            echo "checksum=$(node -p "require('$report').checksumFile")"
+            echo "sha256=$(node -p "require('$report').sha256")"
+            echo "files=$(node -p "require('$report').files")"
+            echo "bytes=$(node -p "require('$report').zipBytes")"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-package-${{ steps.meta.outputs.version }}
+          path: |
+            dist/${{ steps.meta.outputs.zip }}
+            dist/${{ steps.meta.outputs.checksum }}
+            dist/package-report.json
+          if-no-files-found: error
+      - name: 写入 job 摘要
+        run: |
+          {
+            echo "### 构建产物（未发布）"
+            echo "- 版本：${{ steps.meta.outputs.version }}"
+            echo "- ZIP：${{ steps.meta.outputs.zip }}（${{ steps.meta.outputs.files }} 个文件，${{ steps.meta.outputs.bytes }} 字节）"
+            echo "- SHA-256：\`${{ steps.meta.outputs.sha256 }}\`"
+            echo "- 校验文件：${{ steps.meta.outputs.checksum }}"
+            echo "- dry_run：${{ inputs.dry_run || 'false (push to main)' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: 创建 GitHub Release
+    needs: build
+    if: >-
+      github.repository == 'Kevin-Yixuan/babel-tower-backtranslation' &&
+      (github.event_name != 'workflow_dispatch' || inputs.dry_run != true)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.build.outputs.tag }}
+      VERSION: ${{ needs.build.outputs.version }}
+      ZIP: ${{ needs.build.outputs.zip }}
+      CHECKSUM: ${{ needs.build.outputs.checksum }}
+      SHA256: ${{ needs.build.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 同步 tag
+        run: git fetch --tags origin
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-package-${{ needs.build.outputs.version }}
+          path: dist
+      - name: 发布前检查：tag 与 Release 都不能已存在
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::远端已存在 tag $TAG，拒绝重复发布。请提高 manifest.json 的版本号。"
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::已存在 Release $TAG，拒绝重复发布。"
+            exit 1
+          fi
+          echo "未发现重复：$TAG"
+      - name: 生成 Release 说明
+        run: |
+          previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+          {
+            echo "社群预览版 $VERSION。以「加载已解压的扩展程序」安装，解压后请**保持同一目录**，详见包内《安装与更新.md》。"
+            echo
+            echo "校验：\`sha256sum -c $CHECKSUM\`"
+            echo
+            echo "## 变更"
+            if [ -n "$previous" ]; then
+              git log --no-merges --pretty='- %s' "$previous..HEAD"
+            else
+              git log --no-merges --pretty='- %s' -20
+            fi
+          } > notes.md
+          cat notes.md
+      - name: 创建 Release（含 ZIP 与校验文件）
+        run: |
+          gh release create "$TAG" "dist/$ZIP" "dist/$CHECKSUM" \
+            --prerelease \
+            --title "巴别塔（回译）$VERSION 社群预览版" \
+            --notes-file notes.md \
+            --target "${{ github.sha }}"
+      - name: 发布后校验：资产齐全且哈希一致
+        run: |
+          assets=$(gh release view "$TAG" --json assets --jq '.assets[].name' | sort)
+          echo "$assets"
+          count=$(printf '%s\n' "$assets" | grep -c . || true)
+          if [ "$count" != "2" ]; then
+            echo "::error::Release 资产数量应为 2（ZIP 与 SHA-256），实际 $count"
+            exit 1
+          fi
+          mkdir -p verify
+          gh release download "$TAG" --dir verify --pattern "$ZIP" --pattern "$CHECKSUM"
+          echo "$SHA256  verify/$ZIP" | sha256sum -c -
+          diff <(cat "dist/$CHECKSUM") <(cat "verify/$CHECKSUM")
+          echo "发布完成：$TAG"
+      - name: 写入 job 摘要
+        run: |
+          {
+            echo "### 已发布 $TAG"
+            echo "- Release：https://github.com/${{ github.repository }}/releases/tag/$TAG"
+            echo "- 资产：$ZIP、$CHECKSUM"
+            echo "- SHA-256：\`$SHA256\`"
+          } >> "$GITHUB_STEP_SUMMARY"
