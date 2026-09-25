@@ -29,7 +29,7 @@
     translate.className = 'bx-inline-button bx-entry';
     translate.dataset.bxEntry = 'read';
     translate.textContent = '翻译';
-    translate.onclick = event => { event.preventDefault(); event.stopPropagation(); openForPost(article, 'read'); };
+    translate.onclick = event => { event.preventDefault(); event.stopPropagation(); window.BX.emit('translate-full', {}); openForPost(article, 'read'); };
     const reply = document.createElement('button');
     reply.type = 'button';
     reply.className = 'bx-entry bx-entry-reply';

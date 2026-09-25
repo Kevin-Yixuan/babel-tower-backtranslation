@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "巴别塔（回译）· X 跨语言阅读与表达",
   "short_name": "巴别塔（回译）",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "在 X 上查词、理解句子、回译练习，并用自己的语言写回复。",
   "permissions": ["storage"],
   "host_permissions": [

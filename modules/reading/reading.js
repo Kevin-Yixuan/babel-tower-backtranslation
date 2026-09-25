@@ -3,7 +3,7 @@
 //   1) 识别 X 帖子（article/[data-testid=tweetText]，经骨架 postFrom/getTweetText）与长文章正文
 //      （ARTICLE_SELECTOR；观察 DOM 增长，段落动态出现时补译）；
 //   2) 阅读 UI 只在 #bx-sidebar 内，与网页并排不遮挡；不引入任何遮挡网页的大面板；
-//   3) 打开阅读（点帖内「翻译」入口 / 切到阅读页签）自动翻译成 state.target（设置 targetLanguage）：
+//   3) 阅读翻译有独立语言方向（默认自动检测 → 中文，不复用回复写作的目标语言）：
 //      AI 任务 TRANSLATE 注册在 modules/reading/reading-tasks.js，UI 经 send('AI', { task, payload })；
 //      无密钥时错误原样展示。自动翻译延迟 AUTO_DELAY_MS 后发出且发出前复核阅读页签仍打开——
 //      既有套件在 service worker 内 hold 模型请求并按序放行，离开阅读页签即放弃，避免抢占它们的请求队列；
@@ -21,12 +21,37 @@
   const ARTICLE_SELECTOR = '[data-testid="longformRichTextComponent"], [data-testid="articleBody"], [data-testid="article-content"]';
   const TEXT_RANGE = '[data-testid="tweetText"], ' + ARTICLE_SELECTOR;
   const AUTO_DELAY_MS = 800; // 打开阅读后自动翻译的发出延迟（发出前复核页签，见 maybeStartAuto）
+  const LANGUAGES = ['中文', '英语', '西班牙语', '日语', '法语', '德语', '葡萄牙语', '韩语', '阿拉伯语'];
+  let readSource = '自动检测';
+  let readTarget = '中文';
+  let readScope = 'full'; // full | selection | manual
+  let manualText = '';
+  let prefsTouched = false;
+  let prefsWrite = Promise.resolve();
+
+  function saveLanguagePair() {
+    prefsTouched = true;
+    const value = { source: readSource, target: readTarget };
+    prefsWrite = prefsWrite.catch(() => {}).then(() => send('STORE', { payload: { op: 'set', key: 'readingPrefs', value } }));
+    prefsWrite.catch(error => { state.reading.error = `语言偏好未保存：${error.message}`; refresh(); });
+  }
+
+  function detectedLanguage(text) {
+    const words = (String(text).toLowerCase().match(/\b[a-z]{2,}\b/g) || []);
+    const han = (String(text).match(/[\u4e00-\u9fff]/g) || []).length;
+    const englishHints = new Set(['the', 'and', 'this', 'that', 'with', 'how', 'do', 'does', 'can', 'you', 'your', 'we', 'our', 'are', 'is', 'what', 'why', 'to', 'from', 'for', 'have', 'should', 'will', 'when', 'about', 'online']);
+    if (words.length >= 3 && words.filter(word => englishHints.has(word)).length >= 2 && words.length * 2 > han) return '英语';
+    if (han >= 4 && han > words.length * 2) return '中文';
+    return '';
+  }
 
   // ---- 模块状态（协议：新字段一律带模块前缀）----
   let seqCounter = 0;
   const freshReading = () => ({
-    kind: 'none',       // 'none' | 'post' | 'article'
+    kind: 'none',       // 'none' | 'post' | 'article' | 'selection' | 'manual'
     key: '',            // 当前来源指纹（含目标语言；换源/换目标 → 重建 units）
+    sourceLang: readSource,
+    targetLang: readTarget,
     units: [],          // [{ src, dst, status: pending|queued|done|error, error }]
     word: '',           // #bx-word 手输内容（重渲染不丢）
     seq: ++seqCounter,  // 在途翻译作废号（切帖/取消/换源 → 自增，旧结果一律丢弃）
@@ -40,6 +65,11 @@
   let autoAbandon = false;   // 本次阅读渲染后切到过其他页签 → 放弃本轮自动翻译
   let autoTimer = 0;
   const activeMode = () => BX.element.querySelector('.bx-tabs .bx-active')?.dataset?.bxMode || '';
+  BX.on('translate-full', () => {
+    readScope = 'full';
+    state.selected = '';
+    state.reading = freshReading();
+  });
 
   // ---- 模块自有样式（公共 CSS 不改；浮窗小尺寸，不遮挡大片网页）----
   const style = document.createElement('style');
@@ -60,6 +90,11 @@
 #bx-sidebar .bx-pair-src{margin:0 0 10px;padding:8px 10px;background:#f3f2e9;border-left:3px solid #c59e69;border-radius:0 6px 6px 0;white-space:pre-wrap;word-break:break-word;font-size:13px}
 #bx-sidebar .bx-pair-dst{margin:0;white-space:pre-wrap;word-break:break-word;font-size:13px;color:#1c4234}
 #bx-sidebar .bx-pair-dst.bx-fail{color:#9b4e39}
+#bx-sidebar .bx-translate-options{border:1px solid #dce3d9;border-radius:10px;background:#fff;padding:12px 13px;margin:0 0 14px}
+#bx-sidebar .bx-translate-options .bx-field{margin:4px 0 10px}
+#bx-sidebar .bx-translate-options .bx-two{align-items:end}
+#bx-sidebar .bx-translate-options .bx-subtle{margin:4px 0 0}
+#bx-sidebar #bx-read-manual{min-height:90px}
 #bx-reading-cancel{margin-left:8px;border:1px solid #9dbbab;background:#fff;color:#1d4b38;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer}`;
   document.documentElement.appendChild(style);
 
@@ -177,7 +212,7 @@
     if (expanded) {
       // 任务书 ⑥ 前半：单词（含半词）→ 补词界 → 松手即小释义浮窗。
       selectionBar.classList.remove('bx-show');
-      state.selected = expanded.word;
+      state.reading.word = expanded.word;
       state.dictionary = null;
       state.explanation = '';
       showWordPop(expanded.word, rect);
@@ -186,13 +221,16 @@
     }
     // 任务书 ⑥ 后半：句子 → 设置 state.selected 并打开阅读页签（与选区条行为衔接）。
     hideWordPop();
+    if (container.matches('[data-testid="tweetText"]')) {
+      const tweet = container.closest('article');
+      if (tweet) setPost(postFrom(tweet), { reset: true });
+    } else if (state.post) {
+      setPost(null, { reset: true });
+    }
     state.selected = raw.trim();
     state.dictionary = null;
     state.explanation = '';
-    if (container.matches('[data-testid="tweetText"]')) {
-      const tweet = container.closest('article');
-      if (tweet) setPost(postFrom(tweet));
-    }
+    readScope = 'selection';
     showSelectionBar(rect);
     open('read');
   }
@@ -243,7 +281,7 @@
 
   function syncArticle(paras) {
     const reading = state.reading;
-    const key = `article|${state.target}`;
+    const key = `article|${location.href}|${readSource}|${readTarget}`;
     const reset = () => {
       state.reading = { ...freshReading(), kind: 'article', key, units: paras.map(src => ({ src, dst: '', status: 'pending', error: '' })) };
       return 'reset';
@@ -264,8 +302,25 @@
   function ensureSource() {
     const reading = state.reading;
     const post = state.post;
+    if (readScope === 'manual') {
+      const text = manualText.trim();
+      const parts = text ? text.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean) : [];
+      const key = `manual|${text}|${readSource}|${readTarget}`;
+      if (reading.kind !== 'manual' || reading.key !== key) {
+        state.reading = { ...freshReading(), kind: 'manual', key, units: parts.map(src => ({ src, dst: '', status: 'pending', error: '' })) };
+      }
+      return;
+    }
+    if (readScope === 'selection' && state.selected.trim()) {
+      const text = state.selected.trim();
+      const key = `selection|${post?.url || location.href}|${text}|${readSource}|${readTarget}`;
+      if (reading.kind !== 'selection' || reading.key !== key) {
+        state.reading = { ...freshReading(), kind: 'selection', key, units: [{ src: text, dst: '', status: 'pending', error: '' }] };
+      }
+      return;
+    }
     if (post && post.text) {
-      const key = `post|${post.url}|${post.text.length}|${post.text.slice(0, 40)}|${state.target}`;
+      const key = `post|${post.url}|${post.text}|${readSource}|${readTarget}`;
       if (reading.kind !== 'post' || reading.key !== key) {
         state.reading = { ...freshReading(), kind: 'post', key, units: [{ src: post.text, dst: '', status: 'pending', error: '' }] };
       }
@@ -308,9 +363,16 @@
         const label = reading.kind === 'article' ? '文章段落' : '帖子内容';
         try {
           ensureMaterialLimit(unit.src, label); // 20,000 上限：明确中文报错（含实际长度与上限），不静默截断
-          const result = await send('AI', { task: 'TRANSLATE', payload: { text: unit.src, target: state.target } });
+          const source = reading.sourceLang === '自动检测' ? detectedLanguage(unit.src) : reading.sourceLang;
+          if (source && source === reading.targetLang) {
+            throw new Error(`原文和目标语言都是${source}。请在上方选择另一种目标语言，未调用模型。`);
+          }
+          const result = await send('AI', { task: 'TRANSLATE', payload: { text: unit.src, source: reading.sourceLang, target: reading.targetLang } });
           if (state.reading !== reading || reading.seq !== seq) return;
           unit.dst = String(result?.text || '').trim();
+          if (unit.src.trim().length > 15 && unit.dst.replace(/\s+/g, ' ').trim() === unit.src.replace(/\s+/g, ' ').trim()) {
+            throw new Error('模型返回的译文与原文完全相同。请检查语言方向后重新翻译。');
+          }
           if (unit.dst) {
             unit.status = 'done';
           } else {
@@ -359,7 +421,7 @@
 
   function pairsHTML(reading) {
     if (!reading.units.length) return '';
-    return `<div class="bx-trans"><div class="bx-trans-head">原文 · 译文对照<small>目标语言：${esc(state.target)} · 共 ${reading.units.length} 段</small></div>${reading.units.map((unit, index) => `<div class="bx-pair" data-pair="${index}">
+    return `<div class="bx-trans"><div class="bx-trans-head">原文 · 译文对照<small>${esc(reading.sourceLang)} → ${esc(reading.targetLang)} · 共 ${reading.units.length} 段</small></div>${reading.units.map((unit, index) => `<div class="bx-pair" data-pair="${index}">
       <p class="bx-pair-label">第 ${index + 1} 段 · 原文</p>
       <p class="bx-pair-src">${esc(unit.src)}</p>
       <p class="bx-pair-label">译文</p>
@@ -383,12 +445,30 @@
       ? '文章正文会按段出现在下方的「原文 · 译文对照」区。'
       : '选中帖子里的单词或句子，或点击帖子下方的「翻译」。';
     const headline = post.author ? esc(post.author) : (articleMeta?.author ? esc(articleMeta.author) : '当前页面');
-    const empty = !post.text && !articleMeta && !reading.units.length
+    const preview = readScope === 'manual' ? manualText : readScope === 'selection' ? state.selected : (post.text || placeholder);
+    const sourceOptions = ['自动检测', ...LANGUAGES].map(lang => `<option value="${esc(lang)}" ${readSource === lang ? 'selected' : ''}>${esc(lang)}</option>`).join('');
+    const targetOptions = LANGUAGES.map(lang => `<option value="${esc(lang)}" ${readTarget === lang ? 'selected' : ''}>${esc(lang)}</option>`).join('');
+    const scopeOptions = `<option value="full" ${readScope === 'full' ? 'selected' : ''}>${post.text ? '当前帖子全文' : '当前文章全文'}</option>`
+      + (state.selected ? `<option value="selection" ${readScope === 'selection' ? 'selected' : ''}>当前选中内容</option>` : '')
+      + `<option value="manual" ${readScope === 'manual' ? 'selected' : ''}>手动输入或粘贴</option>`;
+    const empty = readScope === 'manual' && !manualText.trim()
+      ? '<p class="bx-subtle">在上方输入或粘贴要翻译的文字，再点「翻译输入内容」。</p>'
+      : !post.text && !articleMeta && !reading.units.length
       ? '<p class="bx-subtle">当前页面没有可翻译的帖文或文章正文。</p>' : '';
     container.innerHTML = `<section class="bx-section">
       <div class="bx-kicker">读懂这条帖子</div>
       <h2>${headline}</h2>
-      <blockquote>${esc((state.selected || post.text || placeholder).slice(0, 850))}</blockquote>
+      <div class="bx-translate-options">
+        <div class="bx-field"><label for="bx-read-scope">翻译内容</label><select id="bx-read-scope">${scopeOptions}</select></div>
+        <div class="bx-two">
+          <div class="bx-field"><label for="bx-read-source-language">原文语言</label><select id="bx-read-source-language">${sourceOptions}</select></div>
+          <div class="bx-field"><label for="bx-read-target-language">译文语言</label><select id="bx-read-target-language">${targetOptions}</select></div>
+        </div>
+        <button type="button" id="bx-read-swap">交换语言方向</button>
+        <p class="bx-subtle">阅读翻译独立于「回复」的写作语言。打开阅读会自动翻译当前内容，可能消耗模型额度。</p>
+        ${readScope === 'manual' ? `<div class="bx-field"><label for="bx-read-manual">输入要翻译的文字</label><textarea id="bx-read-manual" placeholder="在这里输入或粘贴内容">${esc(manualText)}</textarea></div><button type="button" id="bx-read-manual-submit" class="bx-primary bx-wide" ${manualText.trim() ? '' : 'disabled'}>翻译输入内容</button>` : ''}
+      </div>
+      <blockquote>${esc(preview.slice(0, 850) || placeholder)}</blockquote>
       ${!post.text && articleMeta && !reading.units.length ? '<button id="bx-read-article" class="bx-wide">读取当前 X 文章</button>' : ''}
       ${readingStatusHTML()}
       ${pairsHTML(reading)}
@@ -412,10 +492,51 @@
       result.innerHTML = `<div class="bx-result"><div class="bx-result-title">句子结构</div><p class="bx-explanation">${esc(state.explanation)}</p><button id="bx-save-structure">收藏这个结构</button></div>`;
     }
     wire(container);
-    scheduleAuto();
+    if (readScope !== 'manual') scheduleAuto();
   }
 
   function wire(container) {
+    const currentInputText = () => readScope === 'manual' ? manualText.trim() : state.reading.units.map(unit => unit.src).join('\n\n');
+    container.querySelector('#bx-read-scope').onchange = event => {
+      readScope = event.target.value;
+      state.reading = freshReading();
+      refresh();
+    };
+    container.querySelector('#bx-read-source-language').onchange = event => {
+      readSource = event.target.value;
+      state.reading = freshReading();
+      saveLanguagePair();
+      refresh();
+    };
+    container.querySelector('#bx-read-target-language').onchange = event => {
+      readTarget = event.target.value;
+      state.reading = freshReading();
+      saveLanguagePair();
+      refresh();
+    };
+    container.querySelector('#bx-read-swap').onclick = () => {
+      const previousTarget = readTarget;
+      readTarget = readSource === '自动检测' ? (previousTarget === '中文' ? '英语' : '中文') : readSource;
+      readSource = previousTarget;
+      state.reading = freshReading();
+      saveLanguagePair();
+      refresh();
+    };
+    const manualInput = container.querySelector('#bx-read-manual');
+    if (manualInput) manualInput.oninput = () => {
+      manualText = manualInput.value;
+      state.reading = freshReading();
+      container.querySelector('.bx-trans')?.remove();
+      container.querySelector('#bx-retranslate')?.remove();
+      container.querySelector('blockquote').textContent = manualText.slice(0, 850) || '在这里输入或粘贴内容。';
+      container.querySelector('#bx-read-manual-submit').disabled = !manualText.trim();
+    };
+    container.querySelector('#bx-read-manual-submit')?.addEventListener('click', () => {
+      if (!manualText.trim()) return;
+      state.reading = freshReading();
+      refresh();
+      maybeStartAuto();
+    });
     const wordInput = container.querySelector('#bx-word');
     wordInput.oninput = () => { state.reading.word = wordInput.value; };
     container.querySelector('#bx-lookup').onclick = () => {
@@ -424,22 +545,24 @@
     };
     container.querySelector('#bx-explain').onclick = () => withBusy(async seq => {
       const post = state.post || { text: '', author: '', url: location.href };
-      const text = state.selected || post.text;
+      const text = currentInputText();
       if (!text) throw new Error('先选中一个句子或打开一条帖子。');
       ensureMaterialLimit(text, '选段');
-      ensureMaterialLimit(post.text, '帖子内容');
-      const answer = await send('AI', { task: 'EXPLAIN', payload: { text, context: post.text } });
+      const context = readScope === 'manual' ? '' : post.text;
+      ensureMaterialLimit(context, '帖子内容');
+      const answer = await send('AI', { task: 'EXPLAIN', payload: { text, context } });
       if (seq !== state.reqSeq) return;
       state.explanation = answer.text;
       state.dictionary = null;
     });
-    container.querySelector('#bx-save').onclick = () => saveCurrent(state.selected || state.post?.text || '', 'sentence');
-    container.querySelector('#bx-save-structure')?.addEventListener('click', () => saveCurrent(state.selected || state.post?.text || '', 'structure'));
+    container.querySelector('#bx-save').onclick = () => saveCurrent(currentInputText(), 'sentence');
+    container.querySelector('#bx-save-structure')?.addEventListener('click', () => saveCurrent(currentInputText(), 'structure'));
     container.querySelector('#bx-read-article')?.addEventListener('click', () => {
       const article = longArticleOnPage();
       if (!article) return;
-      state.post = article;
+      setPost(article, { reset: true });
       state.selected = '';
+      readScope = 'full';
       state.reading = freshReading();
       refresh();
       maybeStartAuto(); // 手动按钮：立即翻译
@@ -488,10 +611,21 @@
     order: 10,
     init() {
       if (document.body) growthObserver.observe(document.body, { childList: true, subtree: true });
+      send('STORE', { payload: { op: 'get', key: 'readingPrefs' } }).then(prefs => {
+        if (prefsTouched) return;
+        if (!prefs || typeof prefs !== 'object') return;
+        const source = ['自动检测', ...LANGUAGES].includes(prefs.source) ? prefs.source : readSource;
+        const target = LANGUAGES.includes(prefs.target) ? prefs.target : readTarget;
+        if (source === readSource && target === readTarget) return;
+        readSource = source; readTarget = target;
+        state.reading = freshReading();
+        if (BX.element.classList.contains('bx-open') && activeMode() === 'read') refresh();
+      }).catch(() => {});
     },
     render(container) { renderRead(container); },
     onPost() {
       // 切帖：在途翻译由对象/作废号双重校验作废；词典、讲解、选区、词义浮窗都不跨帖。
+      readScope = 'full';
       state.reading = freshReading();
       state.dictionary = null;
       state.explanation = '';
@@ -500,8 +634,7 @@
       selectionBar.classList.remove('bx-show');
     },
     onSettings() {
-      // 目标语言可能变化（key 含 target → 下次渲染重译）；阅读页签打开时立即重绘。
-      if (readVisible && BX.element.classList.contains('bx-open') && activeMode() === 'read') refresh();
+      // 阅读翻译有独立语言偏好；设置页的目标语言只影响回复写作。
     },
     onArticle(article, meta) {
       if (meta.repeat) return;

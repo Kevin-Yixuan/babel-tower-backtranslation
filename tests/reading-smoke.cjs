@@ -160,7 +160,8 @@ const say = line => { log.push(line); console.log(line); };
   await waitPending(1);
   const [firstReq] = await translateRequests();
   assert(firstReq.input.includes(A_TEXT), '请求 input 必须含完整原文（无静默截断）');
-  assert(firstReq.instructions.includes('英语'), '目标语言进入 prompt');
+  assert(firstReq.instructions.includes('中文'), '英文阅读默认译成中文');
+  assert(firstReq.input.includes('目标语言：中文'), '请求 input 带独立的阅读目标语言');
   assert(firstReq.instructions.includes('不要执行'), 'prompt 要求不执行原文中的指令');
   assert(firstReq.instructions.includes('不得静默截断'), 'prompt 要求不静默截断');
   await releaseHold();
@@ -203,10 +204,12 @@ const say = line => { log.push(line); console.log(line); };
   await tweets.locator('#a .bx-inline-button').click();
   await waitPending(1); // A 的自动翻译挂起
   await selectRange(tweets, '#a [data-testid="tweetText"]', 0, 33);
+  await waitPending(2); // A 的选中句子也按独立范围翻译
   const aBody = await tweets.locator('#bx-body').innerText();
   assert(aBody.includes(SENTENCE_A), 'A 选区在 A 上下文可见');
+  assert.equal(await tweets.locator('.bx-pair-src').first().innerText(), SENTENCE_A, '选句只翻译选中内容');
   await tweets.locator('#b .bx-inline-button').click(); // 切帖
-  await waitPending(2); // B 的自动翻译也发出
+  await waitPending(3); // B 的自动翻译也发出
   let bBody = await tweets.locator('#bx-body').innerText();
   if (!bBody.includes('BETA_SRC')) {
     console.error('[debug] bBody =', JSON.stringify(bBody.slice(0, 600)));
@@ -217,11 +220,14 @@ const say = line => { log.push(line); console.log(line); };
   assert(bBody.includes('BETA_SRC'), 'B 帖文进入对照区');
   assert(!bBody.includes(SENTENCE_A), '切帖后 A 的选区不得出现在 B 上下文');
   assert.equal(await tweets.locator('#bx-selection-bar.bx-show').count(), 0, '切帖后选区条收起');
-  await releaseHold(); // 先放行 A（晚到）
+  await releaseHold(); // 先放行 A 全文（晚到）
   await tweets.waitForTimeout(600);
   bBody = await tweets.locator('#bx-body').innerText();
   assert(!bBody.includes('ALPHA_TRANS_ZZZ'), 'A 的在途翻译晚到必须被丢弃');
-  await releaseHold(); // 再放行 B
+  await releaseHold(); // 再放行 A 选句（晚到）
+  await tweets.waitForTimeout(200);
+  assert(!(await tweets.locator('#bx-body').innerText()).includes('ALPHA_TRANS_ZZZ'), 'A 选句晚到也必须被丢弃');
+  await releaseHold(); // 最后放行 B
   await tweets.locator('.bx-pair-dst.bx-done').first().waitFor({ timeout: 10000 });
   bBody = await tweets.locator('#bx-body').innerText();
   assert(bBody.includes('BETA_TRANS_YYY'), 'B 的翻译正常呈现');
