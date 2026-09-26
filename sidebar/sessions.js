@@ -29,9 +29,13 @@
       const record = await BX.send('SESSION', { payload: { op: 'save', key: slot.storageKey, data, revision: slot.revision } });
       slot.revision = record.revision; slot.storageKey = record.key;
       slot.data = data; slot.failed = false;
-      if (current === slot) {
-        state.saveStatus = record.conflict ? '已另存冲突副本；可在设置中查看' : '已自动保存';
-        if (record.conflict) state.notice = state.saveStatus;
+      if (record.conflict) {
+        // 冲突必须明确提示：无论冲突发生在当前帖还是切帖后才落盘的旧帖，都要让用户知道副本去向。
+        const message = (current === slot ? '' : '上一帖') + '已另存冲突副本；可在设置中查看';
+        state.saveStatus = message; state.notice = message;
+        updateStatus(); BX.refresh();
+      } else if (current === slot) {
+        state.saveStatus = '已自动保存';
         updateStatus();
       }
     }).catch(error => {
@@ -84,7 +88,18 @@
   }
   function switchTo(post, apply) {
     const key = window.BXContext.key(post?.url || '');
-    if (!key) { pendingSwitch = null; apply(post); return; }
+    if (!key) {
+      // 无稳定 ID（首页/外站/识别失败的链接）：不归属任何会话。
+      // 恢复进行中 → 挂起等旧帖落盘后再脱离，避免旧记录覆盖新页面状态；
+      // 否则立即落盘旧帖并脱离槽位，此后输入/模块清理绝不再写进上一帖的记录。
+      if (restoring) { pendingSwitch = { post, apply }; return; }
+      if (current) save(true);
+      pendingSwitch = null;
+      apply(post);
+      current = null;
+      updateStatus();
+      return;
+    }
     if (current?.key === key) {
       // 同帖（含查询参数/链接形态差异）：不重置、不重复恢复，只吸收正文变化。
       pendingSwitch = null;
@@ -101,8 +116,16 @@
     save(true); // 旧帖立即落盘（清掉防抖定时器）
     const ticket = ++epoch;
     restoring = true;
+    // 上一帖的恢复错误与提示不得带到新帖；旧帖保存失败/冲突的提示是异步到达的，
+    // 在此之后设置，仍然可见（带“上一帖”前缀）。
+    state.error = '';
+    state.notice = '';
+    // 新帖没有记录时，目标语言默认值取自设置页（加载时捕获的默认值会盖掉设置）。
+    const settingsTarget = typeof state.settings?.targetLanguage === 'string' && state.settings.targetLanguage.trim()
+      ? state.settings.targetLanguage : '';
     for (const field of fields) {
-      if (Object.hasOwn(defaults, field)) state[field] = structuredClone(defaults[field]);
+      if (field === 'target' && settingsTarget) state.target = settingsTarget;
+      else if (Object.hasOwn(defaults, field)) state[field] = structuredClone(defaults[field]);
       else delete state[field];
     }
     apply(post);

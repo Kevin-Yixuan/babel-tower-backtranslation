@@ -155,7 +155,7 @@ function loadContext() {
   return win.BXContext;
 }
 function createHarness(options = {}) {
-  const opts = { slowGetMs: 0, failSaves: 0, ...options };
+  const opts = { slowGetMs: 0, failSaves: 0, failMessage: '', ...options };
   const counters = { refresh: 0, emits: [], saves: 0, gets: 0, saveKeys: [] };
   const state = {
     mode: 'read', post: null, selected: '', editor: null, busy: false, error: '', notice: '',
@@ -177,7 +177,7 @@ function createHarness(options = {}) {
     }
     if (op.op === 'save') {
       counters.saveKeys.push(op.key);
-      if (opts.failSaves > 0) { opts.failSaves--; throw new Error('模拟磁盘故障'); }
+      if (opts.failSaves > 0) { opts.failSaves--; throw new Error(opts.failMessage || '模拟磁盘故障'); }
       counters.saves++;
       return sessionOp(op);
     }
@@ -593,5 +593,189 @@ test('无记录的新帖：不写空壳记录；首次输入后才入库', async
   await sleep(600);
   assert.equal(h.counters.saves, 1);
   assert.equal((await sessionOp({ op: 'get', key: 'post:222' })).data.draft, '第一笔');
+  await removeAllSessions();
+});
+
+// ================= E. WIP 深审补测：脱离槽位、刷新冲刷、容量提示、字段级时间线 =================
+test('无稳定 ID 页面：脱离槽位，后续输入不得写入上一帖记录', async () => {
+  await removeAllSessions();
+  await seed('post:111', { draft: 'A稿' });
+  const h = createHarness();
+  h.win.BXSession.switchTo(POST_A, h.apply);
+  await h.win.BXSession.ready;
+  h.state.draft = 'A稿改';
+  await h.win.BXSession.save(true);
+  // 跳到识别不出稳定 ID 的页面（如 x.com/home）：会话必须脱离旧帖
+  h.win.BXSession.switchTo({ url: 'https://x.com/home', text: '', author: '' }, h.apply);
+  assert.equal(h.win.BXSession.key, '', '无 ID 页面没有会话键');
+  h.state.draft = '首页误输入';
+  h.fireInput();
+  await sleep(600);
+  assert.equal((await sessionOp({ op: 'get', key: 'post:111' })).data.draft, 'A稿改', '无 ID 页面的输入/清理不得写进上一帖');
+  // 回到原帖仍恢复刚保存的内容
+  h.win.BXSession.switchTo(POST_A, h.apply);
+  await h.win.BXSession.ready;
+  assert.equal(h.state.draft, 'A稿改');
+  await removeAllSessions();
+});
+
+test('刷新：防抖未落盘时 pagehide 冲刷，新实例完整恢复', async () => {
+  await removeAllSessions();
+  await seed('post:111', { draft: '旧稿' });
+  const h1 = createHarness();
+  h1.win.BXSession.switchTo(POST_A, h1.apply);
+  await h1.win.BXSession.ready;
+  h1.state.draft = '刷新前的输入';
+  h1.fireInput(); // 防抖 400ms 窗口内，尚未发送
+  h1.firePagehide(); // F5/关页：立即冲刷
+  await sleep(80);
+  const h2 = createHarness();
+  h2.win.BXSession.switchTo(POST_A, h2.apply);
+  await h2.win.BXSession.ready;
+  assert.equal(h2.state.draft, '刷新前的输入', '防抖窗口内的输入经 pagehide 落盘，刷新后恢复');
+  await removeAllSessions();
+});
+
+test('容量失败在侧栏层明确提示，草稿保留且 pagehide 重试成功', async () => {
+  await removeAllSessions();
+  await seed('post:111', { draft: '原稿' });
+  const h = createHarness();
+  h.win.BXSession.switchTo(POST_A, h.apply);
+  await h.win.BXSession.ready;
+  h.opts.failSaves = 1;
+  h.opts.failMessage = '浏览器存储空间不足，本次操作未写入；原有记录未被删除。请先导出备份并清理空间后重试。';
+  h.state.draft = '超额稿';
+  await h.win.BXSession.save(true);
+  assert.match(h.state.saveStatus, /保存失败.*存储空间不足/, '容量错误原样透出到状态栏');
+  assert.match(h.label.textContent, /存储空间不足/, '状态栏标签直接可见');
+  assert.equal((await sessionOp({ op: 'get', key: 'post:111' })).data.draft, '原稿', '容量失败不写入、不删原稿');
+  h.firePagehide();
+  await sleep(120);
+  assert.equal((await sessionOp({ op: 'get', key: 'post:111' })).data.draft, '超额稿', '故障恢复后本地草稿重试入库，不静默丢失');
+  await removeAllSessions();
+});
+
+test('字段级时间线：译文/讲解/回译题目/作答/反馈恢复，reading 入库前归一化', async () => {
+  await removeAllSessions();
+  await seed('post:111', {
+    dictionary: { entries: [{ term: 'hello' }] }, explanation: '讲解A',
+    reading: { sourceLang: '英语', targetLang: '中文', units: [{ id: 1, src: 'Hi', dst: '你好', status: 'pending' }] },
+    practice: { chinese: '题目A', focus: '时态' }, practiceAnswer: 'I am',
+    practiceFeedback: { grammarNote: 'ok' }, revision: 'I was', revisionFeedback: { meaningNote: '更准' },
+    idea: '想法', draft: '回复稿', replyFeedback: { note: '旧反馈' }
+  });
+  const h = createHarness();
+  h.win.BXSession.switchTo(POST_A, h.apply);
+  await h.win.BXSession.ready;
+  assert.equal(h.state.explanation, '讲解A');
+  assert.equal(h.state.dictionary.entries[0].term, 'hello');
+  assert.equal(h.state.reading.units[0].dst, '你好');
+  assert.equal(h.state.practice.chinese, '题目A');
+  assert.equal(h.state.practiceAnswer, 'I am');
+  assert.equal(h.state.practiceFeedback.grammarNote, 'ok');
+  assert.equal(h.state.revision, 'I was');
+  assert.equal(h.state.revisionFeedback.meaningNote, '更准');
+  assert.equal(h.state.idea, '想法');
+  assert.equal(h.state.draft, '回复稿');
+  assert.equal(h.state.replyFeedback.note, '旧反馈');
+  // 忙碌/排队态入库前必须归一化，重启后不会卡在 busy/queued
+  h.state.reading = { sourceLang: '英语', targetLang: '中文', busy: true, units: [{ id: 2, src: 'Bye', dst: '', status: 'queued' }] };
+  await h.win.BXSession.save(true);
+  const stored = (await sessionOp({ op: 'get', key: 'post:111' })).data.reading;
+  assert.equal(stored.busy, false, 'busy 不落盘');
+  assert.equal(stored.units[0].status, 'pending', 'queued 归一化为 pending');
+  const h2 = createHarness();
+  h2.win.BXSession.switchTo(POST_A, h2.apply);
+  await h2.win.BXSession.ready;
+  assert.equal(h2.state.reading.busy, false);
+  assert.equal(h2.state.reading.units[0].status, 'pending');
+  assert.equal(h2.state.draft, '回复稿');
+  await removeAllSessions();
+});
+
+test('旧帖的恢复错误不得残留到新帖；新帖恢复成功后状态干净', async () => {
+  await removeAllSessions();
+  await seed('post:222', { draft: 'B稿' });
+  const h = createHarness();
+  const originalSend = h.win.BX.send;
+  let failGets = true;
+  h.win.BX.send = async (action, payload) => {
+    if (failGets && payload.payload?.op === 'get') throw new Error('读取故障');
+    return originalSend(action, payload);
+  };
+  h.win.BXSession.switchTo(POST_A, h.apply); // A 恢复失败
+  await h.win.BXSession.ready;
+  assert.match(h.state.error, /恢复失败.*读取故障/);
+  failGets = false;
+  h.win.BXSession.switchTo(POST_B, h.apply);
+  await h.win.BXSession.ready;
+  assert.equal(h.state.error, '', '上一帖的恢复错误不得带到新帖');
+  assert.equal(h.state.draft, 'B稿');
+  await removeAllSessions();
+});
+
+test('目标语言：新帖沿用设置页选择，已存帖恢复自己的选择', async () => {
+  await removeAllSessions();
+  await seed('post:111', { draft: 'A稿', target: '日语' });
+  const h = createHarness();
+  h.state.settings = { targetLanguage: '日语' };
+  h.win.BXSession.switchTo(POST_A, h.apply);
+  await h.win.BXSession.ready;
+  assert.equal(h.state.target, '日语', '已存帖恢复记录里的目标语言');
+  h.win.BXSession.switchTo(POST_B, h.apply);
+  await h.win.BXSession.ready;
+  assert.equal(h.state.target, '日语', '新帖默认值必须来自设置，而不是加载时的旧快照');
+  h.state.target = '法语';
+  await h.win.BXSession.save(true);
+  h.win.BXSession.switchTo(POST_A, h.apply);
+  await h.win.BXSession.ready;
+  assert.equal(h.state.target, '日语');
+  h.win.BXSession.switchTo(POST_B, h.apply);
+  await h.win.BXSession.ready;
+  assert.equal(h.state.target, '法语', '每帖保留自己的选择');
+  await removeAllSessions();
+});
+
+test('切帖落盘时的多标签冲突：提示“上一帖已另存副本”，原记录不被覆盖', async () => {
+  await removeAllSessions();
+  await seed('post:111', { draft: '初始' }); // rev1
+  const h = createHarness();
+  h.win.BXSession.switchTo(POST_A, h.apply);
+  await h.win.BXSession.ready; // 采纳 revision 1
+  h.state.draft = '本标签稿';
+  // 另一标签抢先写入 → rev2；本标签此时切帖，flush 的保存会撞冲突
+  await sessionOp({ op: 'save', key: 'post:111', data: { draft: '另一标签' }, revision: 1 });
+  h.win.BXSession.switchTo(POST_B, h.apply);
+  await h.win.BXSession.ready;
+  await sleep(30);
+  assert.match(h.state.notice, /上一帖已另存冲突副本/, '切帖后才到达的冲突也必须提示');
+  assert.equal((await sessionOp({ op: 'get', key: 'post:111' })).data.draft, '另一标签', '原记录保持另一标签内容');
+  const all = await sessionOp({ op: 'list' });
+  assert.ok(all.some(x => x.key.startsWith('conflict:') && x.data.draft === '本标签稿'), '本标签内容另存为副本');
+  await removeAllSessions();
+});
+
+test('导出→导入完整回环：会话跨安装一致，归档不含任何密钥', async () => {
+  await removeAllSessions();
+  await seed('post:3001', { draft: '导出稿', practiceAnswer: '导出作答' });
+  installChromeMock({
+    settings: { modelProvider: 'openai', providers: { openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-luna', apiKey: 'sk-DONTLEAK' } } },
+    apiKeys: { openai: 'sk-DONTLEAK2' },
+    initPrompt: '规则', writingDrafts: [{ id: 'w9', text: '稿' }], cards: [], growthMemories: [], savedPhrases: []
+  });
+  const archive = await exportBackup();
+  const json = JSON.stringify(archive);
+  assert.ok(!json.includes('sk-DONTLEAK'), '导出文件不含密钥');
+  assert.ok(!json.includes('sk-DONTLEAK2'), '导出文件不含 apiKeys');
+  // 模拟另一个扩展 ID 的全新安装：清空本地会话与存储后导入
+  await removeAllSessions();
+  const fresh = installChromeMock({});
+  const result = await importBackup(JSON.parse(json));
+  assert.equal(result.sessions, 1);
+  assert.equal((await sessionOp({ op: 'get', key: 'post:3001' })).data.draft, '导出稿');
+  assert.equal((await sessionOp({ op: 'get', key: 'post:3001' })).data.practiceAnswer, '导出作答');
+  assert.equal(fresh.writingDrafts[0].text, '稿');
+  assert.equal(fresh.settings.providers.openai.apiKey, undefined, '导入的配置剥掉密钥');
+  assert.match(result.dictionary, /MDX.*重新导入/);
   await removeAllSessions();
 });
