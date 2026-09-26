@@ -11,7 +11,7 @@ function database() {
   return opening;
 }
 const fields = ['selected', 'dictionary', 'explanation', 'reading', 'practice', 'practiceAnswer', 'practiceFeedback',
-  'revision', 'revisionFeedback', 'idea', 'draft', 'draftNote', 'replyFeedback', 'draftCandidate', 'draftPostUrl', 'target', 'tone', 'replyResult', 'insertMode'];
+  'revision', 'revisionFeedback', 'idea', 'draft', 'draftNote', 'replyFeedback', 'draftCandidate', 'draftPostUrl', 'target', 'tone', 'reply', 'insertMode'];
 export function cleanSnapshot(value) {
   const data = {};
   if (!value || typeof value !== 'object') throw new Error('会话内容格式错误。');
@@ -22,6 +22,11 @@ export function cleanSnapshot(value) {
 }
 function checkKey(key) {
   if (typeof key !== 'string' || !/^(post|article):[0-9]+$|^compose$|^conflict:[a-zA-Z0-9:-]+$/.test(key)) throw new Error('无效的帖子会话。');
+}
+// 容量与底层错误必须给出明确中文提示；事务中止时原有记录保持不变。
+function storageError(error) {
+  if (error?.name === 'QuotaExceededError') return new Error('浏览器存储空间不足，本次操作未写入；原有记录未被删除。请先导出备份并清理空间后重试。');
+  return error instanceof Error ? error : new Error('保存失败，请导出内容后重试。');
 }
 let queue = Promise.resolve();
 export function sessionOp(payload) {
@@ -52,7 +57,7 @@ async function operate({ op, key, data, revision = 0 } = {}) {
         };
       }
       tx.oncomplete = () => resolve({ imported: incoming.length });
-      tx.onabort = tx.onerror = () => reject(tx.error || new Error('会话导入失败，未提交。'));
+      tx.onabort = tx.onerror = () => reject(tx.error?.name === 'QuotaExceededError' ? storageError(tx.error) : new Error('会话导入失败，未提交。'));
     });
   }
   const snapshot = op === 'save' ? cleanSnapshot(data) : null;
@@ -77,6 +82,6 @@ async function operate({ op, key, data, revision = 0 } = {}) {
       };
     }
     tx.oncomplete = () => resolve(result);
-    tx.onabort = tx.onerror = () => reject(tx.error || new Error('保存失败，请导出内容后重试。'));
+    tx.onabort = tx.onerror = () => reject(storageError(tx.error));
   });
 }

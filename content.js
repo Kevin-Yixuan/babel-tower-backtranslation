@@ -48,14 +48,18 @@
     observedHref = location.href;
     // X navigates without reloading content scripts. The prior post, selection, editor,
     // and in-flight answers must not be reused on the next route.
-    window.BX.setPost(null, { reset: true, force: true });
+    const key = window.BXContext.key(location.href);
+    if (key) window.BX.setPost({ url: window.BXContext.canonical(location.href), text: '', author: '' }, { reset: true });
     if (window.BX.element.classList.contains('bx-open')) window.BX.refresh();
   }
   function scan() {
     reconcileLocation();
+    const routeKey = window.BXContext.key(location.href);
     document.querySelectorAll('article[data-testid="tweet"], article').forEach(article => {
       const textNode = article.querySelector('[data-testid="tweetText"]');
       if (!textNode) return;
+      const parsed = window.BX.util.postFrom(article);
+      if (routeKey && window.BXContext.key(parsed.url) === routeKey) window.BX.setPost(parsed, { reset: true });
       const key = postKey(article);
       const sig = postTextSignature(article);
       if (article.dataset.bxReady) {
@@ -88,6 +92,7 @@
   // pushState does not fire popstate; keep this inexpensive route check as a fallback
   // when X changes the URL before it mounts the next article.
   setInterval(reconcileLocation, 500);
+  if (window.BXContext.key(location.href)) window.BX.setPost({ url: window.BXContext.canonical(location.href), text: '', author: '' }, { reset: true });
   scan();
 
   document.addEventListener('focusin', event => { if (isEditor(event.target)) notifyEditor(event.target); });
@@ -95,12 +100,8 @@
   // MV3 内容脚本收不到 chrome.storage.onChanged（实测 Edge 153 从未触发），
   // 设置变化由 background.js 收到 storage 事件后广播 BX_SETTINGS_CHANGED 过来。
   chrome.runtime.onMessage.addListener((message, _sender, respond) => {
-    if (message?.action === 'BX_UPDATE_PING') {
-      respond({ ok: true });
-      return false;
-    }
     if (message?.action === 'BX_SETTINGS_CHANGED') {
-      window.BX.send('PUBLIC_SETTINGS').then(applySettings).catch(() => {});
+      window.BX.awaitSettings(window.BX.send('PUBLIC_SETTINGS').then(applySettings).catch(error => { window.BX.state.error = '设置加载失败：' + error.message; }));
       respond({ ok: true });
     }
     return false;

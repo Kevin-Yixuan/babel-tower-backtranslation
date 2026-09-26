@@ -1,8 +1,10 @@
 // 发布包内容契约。
 //
-// ROOT_FILES / RUNTIME_DIRS 不是随手写的：update-unpacked.ps1 在更新时会逐个检查
-// $rootFiles 和 mdx / modules / sidebar 三个目录，缺任何一项就拒绝更新。包结构与
-// 更新脚本的期望必须一致，否则社群用户会装出一个"更新器认不出来"的版本。
+// ROOT_FILES / RUNTIME_DIRS 描述「完整候选提交可以独立构建出可加载扩展」所需的
+// 全部文件：根目录白名单 + 运行期真正会被 import / 引用到的目录（background.js
+// 依赖 services/，内容脚本与后台都依赖 mdx / modules / sidebar）。
+// 已退役的本地自动更新机制（update-unpacked.ps1、update-marker.json）不再随包，
+// 由 DENY_PATTERNS 兜底拒绝，见下方注释。
 
 export const PACKAGE_BASENAME = 'babel-tower-backtranslation';
 
@@ -19,16 +21,13 @@ export const ROOT_FILES = [
   'writing.html',
   'writing.js',
   'writing.css',
-  'update-unpacked.ps1',
   '安装与更新.md'
 ];
 
-export const RUNTIME_DIRS = ['mdx', 'modules', 'sidebar'];
+export const RUNTIME_DIRS = ['mdx', 'modules', 'services', 'sidebar'];
 
 // 通用安装说明：优先随包内附的《安装与更新》，README 的「下载与安装」作为兜底。
 export const INSTALL_DOC_CANDIDATES = ['安装与更新.md', 'README.md'];
-
-export const MARKER_FILE = 'update-marker.json';
 
 // 任何命中即拒绝进入发布包。用白名单收集 + 黑名单兜底，避免把测试截图、
 // 本地密钥、内部交接资料或词典数据打进 ZIP。
@@ -48,7 +47,10 @@ export const DENY_PATTERNS = [
   { pattern: /\.(pem|key|p12|pfx)$/i, reason: '密钥文件' },
   { pattern: /(^|\/)HANDOFF\.md$/i, reason: '内部交接资料' },
   { pattern: /(^|\/)使用说明-.*\.md$/, reason: '版本专属内部说明' },
-  { pattern: /(^|\/)(secrets?|credentials)\./i, reason: '可能的密钥文件' }
+  { pattern: /(^|\/)(secrets?|credentials)\./i, reason: '可能的密钥文件' },
+  // 已退役的本地自动更新机制：脚本与完成标记都从未随任何版本发布，也不再打包。
+  { pattern: /(^|\/)update-unpacked\.ps1$/i, reason: '已退役的本地自动更新脚本' },
+  { pattern: /(^|\/)update-marker\.json$/i, reason: '已退役的更新完成标记' }
 ];
 
 export function packageDirName(version) {
@@ -76,12 +78,18 @@ export function manifestReferencedFiles(manifest) {
   const refs = new Set();
   if (manifest.background?.service_worker) refs.add(manifest.background.service_worker);
   if (manifest.action?.default_popup) refs.add(manifest.action.default_popup);
+  if (manifest.options_page) refs.add(manifest.options_page);
+  if (manifest.options_ui?.page) refs.add(manifest.options_ui.page);
+  if (manifest.devtools_page) refs.add(manifest.devtools_page);
   for (const script of manifest.content_scripts ?? []) {
     for (const file of script.js ?? []) refs.add(file);
     for (const file of script.css ?? []) refs.add(file);
   }
   for (const file of manifest.web_accessible_resources ?? []) {
     if (typeof file === 'string') refs.add(file);
+    else if (file && Array.isArray(file.resources)) {
+      for (const resource of file.resources) refs.add(resource);
+    }
   }
   return [...refs].sort();
 }

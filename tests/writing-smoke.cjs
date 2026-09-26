@@ -54,7 +54,7 @@ const path = require('node:path');
 
   // 需要先在设置里写入测试密钥（占位符，非真实密钥），runAI 才会放行。
   const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await popup.goto(`chrome-extension://${extensionId}/options.html`);
   await popup.locator('#provider-key').fill('test-placeholder-key');
   await popup.locator('#save-main').click();
   await popup.locator('#status').getByText('已保存').waitFor({ timeout: 8000 });

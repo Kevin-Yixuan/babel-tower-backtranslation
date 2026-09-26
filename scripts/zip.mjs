@@ -10,6 +10,11 @@ const CENTRAL_SIGNATURE = 0x02014b50;
 const EOCD_SIGNATURE = 0x06054b50;
 const VERSION_NEEDED = 20;
 const MAX_EOCD_SEARCH = 65557;
+// 通用标志位 11（EFS）：声明文件名按 UTF-8 编码。本地头与中央目录都必须置位，
+// 否则 Windows PowerShell 5.1 的 Expand-Archive（.NET Framework ZipArchive）
+// 会按 ANSI 代码页解读中文文件名，解压出乱码文件名。名字一律用 UTF-8 写入，
+// 所以对所有条目恒置该位是安全且必要的。
+const FLAG_UTF8 = 0x0800;
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -67,7 +72,7 @@ export function createZipFile({ entries, output }) {
     const local = Buffer.alloc(30);
     local.writeUInt32LE(LOCAL_SIGNATURE, 0);
     local.writeUInt16LE(VERSION_NEEDED, 4);
-    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(FLAG_UTF8, 6);
     local.writeUInt16LE(method, 8);
     local.writeUInt16LE(time, 10);
     local.writeUInt16LE(date, 12);
@@ -85,7 +90,7 @@ export function createZipFile({ entries, output }) {
     header.writeUInt32LE(CENTRAL_SIGNATURE, 0);
     header.writeUInt16LE(VERSION_NEEDED, 4);
     header.writeUInt16LE(VERSION_NEEDED, 6);
-    header.writeUInt16LE(0, 8);
+    header.writeUInt16LE(FLAG_UTF8, 8);
     header.writeUInt16LE(method, 10);
     header.writeUInt16LE(time, 12);
     header.writeUInt16LE(date, 14);
@@ -149,6 +154,7 @@ export function readZipEntries(path) {
     const commentLength = buffer.readUInt16LE(cursor + 32);
     const entry = {
       name: buffer.toString('utf8', cursor + 46, cursor + 46 + nameLength),
+      flags: buffer.readUInt16LE(cursor + 8),
       method: buffer.readUInt16LE(cursor + 10),
       crc: buffer.readUInt32LE(cursor + 16),
       compressedSize: buffer.readUInt32LE(cursor + 20),
@@ -162,6 +168,17 @@ export function readZipEntries(path) {
     cursor += 46 + nameLength + extraLength + commentLength;
   }
   return entries;
+}
+
+// 读取本地头的通用标志位（偏移 6）。校验时要同时检查本地头与中央目录的 UTF-8 位，
+// 两者任何一处缺失，部分解压工具仍会按 ANSI 代码页解读文件名。
+export function readLocalHeaderFlags(path, entry) {
+  const buffer = fs.readFileSync(path);
+  const base = entry.localOffset;
+  if (buffer.readUInt32LE(base) !== LOCAL_SIGNATURE) {
+    throw new Error(`ZIP 本地头损坏：${entry.name}`);
+  }
+  return buffer.readUInt16LE(base + 6);
 }
 
 // 读出单个条目的原始内容（按方法解压），用于校验包内 JSON。

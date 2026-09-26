@@ -64,7 +64,7 @@ const say = line => { log.push(line); console.log(line); };
   popup.on('pageerror', error => errors.push('popup:' + error.message));
   popup.on('console', message => { if (message.type() === 'error') consoleErrors.push('popup:' + message.text()); });
   await popup.setViewportSize({ width: 372, height: 720 });
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await popup.goto(`chrome-extension://${extensionId}/options.html`);
   await popup.locator('[data-tab="dictionary"]').click();
   await popup.locator('#open-mdx-import').waitFor({ timeout: 5000 });
   await popup.locator('#mdx-root .mdx-file').waitFor({ timeout: 5000 });

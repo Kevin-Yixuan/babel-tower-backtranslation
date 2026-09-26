@@ -1,3 +1,4 @@
+import { exportBackup, importBackup, validateBackup } from './services/backup.js';
 import { normalizeSettings, validateProviders, modelFetch } from './services/settings.js';
 import { sessionOp } from './services/sessions.js';
 import {
@@ -65,6 +66,13 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 
 async function handle(message, sender) {
   switch (message.action) {
+    case 'BACKUP': {
+      if (!isExtensionPage(sender)) throw fail('请在设置页管理备份。');
+      if (message.payload?.op === 'export') return exportBackup();
+      if (message.payload?.op === 'preview') return validateBackup(message.payload.archive);
+      if (message.payload?.op === 'import') return importBackup(message.payload.archive);
+      throw fail('未知备份操作。');
+    }
     case 'OPEN_SETTINGS': await chrome.runtime.openOptionsPage(); return { opened: true };
     case 'SESSION': {
       if (['list', 'remove', 'import'].includes(message.payload?.op) && !isExtensionPage(sender)) throw fail('请在设置页管理会话。');

@@ -1,12 +1,18 @@
-// 构建社群预览版发布包：ZIP + SHA-256 + 机器可读构建报告。
+// 构建发布候选包：ZIP + SHA-256 + 机器可读构建报告。
 //
 // 用法：
 //   node scripts/build-package.mjs [--root .] [--out dist]
 //                                  [--previous 0.2.2] [--skip-remote-check]
 //                                  [--version-gate fail|warn]
+//                                  [--layout preview|store]
 //
-// 只写 --out 目录，不改动仓库里任何源文件。包内 update-marker.json 由本脚本生成，
-// 因此仓库里的那份永远不会被改写。
+// 只写 --out 目录，不改动仓库里任何源文件。
+// --layout preview（默认）：ZIP 第一层是 babel-tower-backtranslation-<版本>/ 单一目录，
+//   用于 GitHub Release 解压安装。
+// --layout store：文件平铺在 ZIP 根（manifest.json 在第一层），用于 Chrome Web Store
+//   提交候选包。
+// 版本查询（git ls-remote --tags origin）失败时默认阻断构建；只有显式
+// --skip-remote-check 或显式 --previous 才允许跳过远端查询。
 
 import fs from 'node:fs';
 import path from 'node:path';

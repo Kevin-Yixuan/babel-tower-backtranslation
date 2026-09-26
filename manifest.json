@@ -27,8 +27,11 @@
         "https://twitter.com/*"
       ],
       "js": [
+        "sidebar/context.js",
         "sidebar/sidebar.js",
+        "sidebar/sessions.js",
         "modules/reading/reading.js",
+        "modules/reading/hover-lookup.js",
         "modules/reply/reply.js",
         "modules/practice/practice.js",
         "modules/growth/growth.js",

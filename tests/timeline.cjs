@@ -159,7 +159,7 @@ const say = line => { log.push(line); console.log(line); };
   const popup = await context.newPage();
   popup.on('pageerror', error => errors.push('popup:' + error.message));
   await popup.setViewportSize({ width: 372, height: 680 });
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await popup.goto(`chrome-extension://${extensionId}/options.html`);
   await popup.locator('#provider-key').waitFor();
   await popup.locator('[data-tab="filters"]').click();
   await popup.locator('#jev-diagnostics').getByText(/失败 [1-9]/).waitFor({ timeout: 5000 });
