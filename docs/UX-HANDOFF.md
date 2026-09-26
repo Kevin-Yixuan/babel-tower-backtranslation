@@ -8,9 +8,10 @@
 | --- | --- |
 | 起点提交 | `7b069c0dbf6a8d6c8939dc54cca72b9b6a613f9d`（T3 集成：商店候选打包管线…） |
 | 起点状态 | 该提交上存在上一位 Agent 留下的**未提交**第一轮实现（9 个已改文件 + 8 个未跟踪文件），本轮在其基础上继续，未 reset / clean / 覆盖 |
-| 止点提交 | `892e797b0df39a8a6186e30271775543a25e9f89` |
+| 代码止点 | `892e797b0df39a8a6186e30271775543a25e9f89`（第二轮完成） |
+| 当前 HEAD | `4da6164b8b344a66b95f01546b2af910c082989e`（仅本交接文档，**无代码改动**，与 `892e797` 的包内容一致） |
 | 分支 | `feature/chrome-foundation`（**未推送**） |
-| 中间提交 | `767cecc` 第一轮 阅读到回复；`892e797` 第二轮 配置到恢复 |
+| 中间提交 | `767cecc` 第一轮 阅读到回复；`892e797` 第二轮 配置到恢复；`4da6164` 交接文档 |
 | 规格 | `docs/UX-PLAN.md`（用户 2026-09-26 确认） |
 
 未发布、未推送、未上架、未创建公开 Release、未替换日用扩展目录、未使用真实密钥、未点击 X 发布按钮。
@@ -127,10 +128,12 @@ node scripts/verify-package.mjs dist/babel-tower-backtranslation-0.2.3-store.zip
 
 | 候选包 | 路径 | 大小 | SHA-256 |
 | --- | --- | --- | --- |
-| preview | `D:\个人网站\babel-tower-chrome\dist\babel-tower-backtranslation-0.2.3.zip` | 164118 B / 43 文件 | `5627b876290402715ab6e8996a7a946f75c77b4751c70606fb0f95b0e0483c6b` |
-| store | `D:\个人网站\babel-tower-chrome\dist\babel-tower-backtranslation-0.2.3-store.zip` | 161194 B / 43 文件 | `c50b5cbee1acb6afd925df6212f468d960c9b0b852752fa11e3b605a04dbe343` |
+| preview | `D:\个人网站\babel-tower-chrome\dist\babel-tower-backtranslation-0.2.3.zip` | 164118 B / 43 文件 | `4466716394a4253ee1400e4cfdf6049da8777e534160962ded3d6812d37861bf` |
+| store | `D:\个人网站\babel-tower-chrome\dist\babel-tower-backtranslation-0.2.3-store.zip` | 161194 B / 43 文件 | `a5890b3b3a3c93d5b998752f39f348e25423635618fddf2efb0a77119e45618c` |
 
 两者 `verify-package` 均通过（结构、manifest 引用、已退役更新文件、布局、SHA-256 与 `.sha256` 侧车一致）。
+
+> **SHA-256 说明**：ZIP 条目带构建时间戳，因此**每次构建的 SHA 都不同**，该哈希是“这一个交付物”的指纹而非源码的可复现哈希。已验证同一源码多次构建的**文件内容完全一致**（43 个文件逐个 SHA-256 比对 0 差异）。上表以**当前 `dist/` 下实际存在的两个 ZIP** 为准，验收时请对磁盘上的文件重新 `Get-FileHash` 核对。
 
 **解压后加载验证**：`dist/babel-tower-backtranslation-0.2.3.zip` 用 `[System.IO.Compression.ZipFile]` 解压到 `D:\个人网站\.tmp\dev-zip-load`，以 `--load-extension` 在 Edge 中加载 → `ZIP_LOAD_PASS extensionId=oaolekhpcigpidnbbokpbdaonkbeajbl`：侧栏把手出现、点「翻译」后阅读页渲染、新帖默认全文取材、`#settings-dirty-status` 与 `#session-search` 存在、中文文件名《安装与更新.md》解压正常。
 
@@ -157,7 +160,7 @@ node scripts/verify-package.mjs dist/babel-tower-backtranslation-0.2.3-store.zip
 
 ## 8. Astra 验收提示
 
-- 冻结提交：`892e797b0df39a8a6186e30271775543a25e9f89`（起点 `7b069c0dbf6a8d6c8939dc54cca72b9b6a613f9d`）。
+- 冻结提交：`4da6164b8b344a66b95f01546b2af910c082989e`（HEAD，仅含本交接文档；**代码内容 = `892e797b0df39a8a6186e30271775543a25e9f89`**）。起点 `7b069c0dbf6a8d6c8939dc54cca72b9b6a613f9d`。
 - 包哈希见 §5，请以 `dist/` 下两个 ZIP 的 SHA-256 为准。
 - 必需命令复核：`npm test`、`node --test tests/packaging.test.mjs`、`npm run test:browser`。
   前两项应全绿；第三项预期退出码 1，失败项应与 §4.2 基线列逐条一致——**若出现基线列之外的新失败，即为回归**。
