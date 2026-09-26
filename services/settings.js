@@ -62,6 +62,67 @@ export function validateProviders(input) {
   return result;
 }
 
+// ---------- 生效配置的读写：唯一保存实现（后台与设置页测试都走这里） ----------
+// storage 只需 chrome.storage.local 的 get/set/remove 形状，便于测试只替换存储故障。
+
+const clean = (value, max) => String(value ?? '').trim().slice(0, max);
+
+export async function readSettings(storage) {
+  const { settings: stored } = await storage.get('settings');
+  return normalizeSettings(stored || {});
+}
+
+export async function readApiKeys(storage) {
+  const { apiKeys = {}, openaiKey = '' } = await storage.get(['apiKeys', 'openaiKey']);
+  const keys = { ...apiKeys };
+  if (openaiKey && !keys.openai) { keys.openai = openaiKey; await storage.set({ apiKeys: keys }); }
+  return keys;
+}
+
+export async function publicSettings(storage) {
+  const [settings, apiKeys] = await Promise.all([readSettings(storage), readApiKeys(storage)]);
+  const { jevKey = '', glossary = {} } = await storage.get(['jevKey', 'glossary']);
+  return {
+    ...settings,
+    hasModel: Boolean(apiKeys[settings.modelProvider]),
+    hasOpenAI: Boolean(apiKeys.openai),
+    hasJev: Boolean(jevKey),
+    glossaryCount: Object.keys(glossary).length
+  };
+}
+
+export async function saveSettings(payload, storage) {
+  if (!payload || typeof payload !== 'object') throw new Error('设置格式有误。');
+  const previous = await readSettings(storage);
+  const settings = {
+    schemaVersion: 2,
+    autoTranslate: payload.autoTranslate ?? previous.autoTranslate,
+    hoverLookup: payload.hoverLookup ?? previous.hoverLookup,
+    modelProvider: payload.modelProvider || previous.modelProvider,
+    providers: {},
+    targetLanguage: clean(payload.targetLanguage || '英语', 30),
+    filterEnabled: Boolean(payload.filterEnabled),
+    filterRules: Array.isArray(payload.filterRules) ? payload.filterRules.slice(0, 8).map((rule, index) => ({ id: clean(rule.id || `rule-${index}`, 40), text: clean(rule.text, 180), enabled: Boolean(rule.enabled) })).filter(rule => rule.text) : [],
+    filterThreshold: Math.max(0.65, Math.min(0.98, Number(payload.filterThreshold) || DEFAULT_SETTINGS.filterThreshold)),
+    filterDailyLimit: Math.max(10, Math.min(200, Number(payload.filterDailyLimit) || 80))
+  };
+  settings.providers = validateProviders(payload.providers || previous.providers);
+  if (!Object.hasOwn(settings.providers, settings.modelProvider)) throw new Error('当前模型配置不存在。');
+  settings.model = settings.providers.openai?.model || previous.model;
+  const apiKeys = await readApiKeys(storage);
+  for (const id of Object.keys(settings.providers)) {
+    // undefined = 调用方没发这一格（保留已存）；空串 = 明确清空
+    const incoming = payload.apiKeys?.[id];
+    const key = incoming === undefined ? (apiKeys[id] || '') : clean(incoming, 250);
+    if (key) apiKeys[id] = key; else delete apiKeys[id];
+  }
+  for (const id of Object.keys(apiKeys)) if (!Object.hasOwn(settings.providers, id)) delete apiKeys[id];
+  const jevKey = payload.jevKey === undefined ? (await storage.get('jevKey')).jevKey || '' : clean(payload.jevKey, 250);
+  await storage.set({ settings, apiKeys, jevKey });
+  await storage.remove('openaiKey'); // 已并入 apiKeys
+  return publicSettings(storage);
+}
+
 export async function modelFetch(url, options, fetcher = fetch) {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

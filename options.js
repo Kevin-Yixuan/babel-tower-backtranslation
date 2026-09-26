@@ -15,6 +15,19 @@ let rules = [];
 // provider drafts hold form state per provider so switching tabs never loses input
 const providerDrafts = {};
 let loadedSettings; // 最近一次「生效」的设置；未保存的表单改动不写入这里
+let dirty = false;   // 生效配置与表单的差异标记：只有未保存修改时才提示
+let formVersion = 0; // 每次编辑递增；连接测试按发起时的版本判定结果是否还属于当前配置
+let testRun = 0;     // 连接测试序号：晚到的旧结果不覆盖新一次测试
+let saving = false;  // 保存进行中禁止重复提交
+
+function setDirty(next) {
+  dirty = Boolean(next);
+  const label = $('#settings-dirty-status');
+  if (label) label.textContent = dirty ? '有未保存的修改，保存后才生效。' : '所有修改已保存。';
+}
+function markFormEdit() { formVersion++; setDirty(true); }
+// 离开/刷新只在有未保存修改时提示；干净页面不拦。
+window.addEventListener('beforeunload', event => { if (!dirty) return; event.preventDefault(); event.returnValue = ''; });
 
 function status(message, error = false) {
   $('#status').textContent = message;
@@ -29,15 +42,25 @@ function switchTab(tab) {
 }
 document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => switchTab(button.dataset.tab));
 
+// 表单编辑统一走这里：既标记未保存，也让在途连接测试作废。
+for (const selector of ['#provider-label', '#provider-kind', '#provider-base-url', '#provider-model', '#provider-key',
+  '#model-provider', '#target-language', '#auto-translate', '#hover-lookup', '#jev-key',
+  '#filter-enabled', '#filter-threshold', '#filter-limit']) {
+  const node = document.querySelector(selector);
+  if (!node) continue;
+  node.addEventListener('input', markFormEdit);
+  node.addEventListener('change', markFormEdit);
+}
+
 function renderRules() {
   $('#rules').innerHTML = rules.length ? rules.map((rule, index) => `<div class="rule"><input type="checkbox" data-rule-enabled="${index}" ${rule.enabled ? 'checked' : ''} aria-label="启用此规则"><input type="text" data-rule-text="${index}" value="${esc(rule.text)}" placeholder="描述想折叠的帖子" maxlength="180"><button data-rule-delete="${index}" aria-label="删除规则">×</button></div>`).join('') : '<p class="hint">还没有规则。点击“添加”，用一句话描述想折叠的内容。</p>';
-  document.querySelectorAll('[data-rule-enabled]').forEach(input => input.onchange = () => { rules[Number(input.dataset.ruleEnabled)].enabled = input.checked; });
-  document.querySelectorAll('[data-rule-text]').forEach(input => input.oninput = () => { rules[Number(input.dataset.ruleText)].text = input.value; });
-  document.querySelectorAll('[data-rule-delete]').forEach(button => button.onclick = () => { rules.splice(Number(button.dataset.ruleDelete), 1); renderRules(); });
+  document.querySelectorAll('[data-rule-enabled]').forEach(input => input.onchange = () => { rules[Number(input.dataset.ruleEnabled)].enabled = input.checked; markFormEdit(); });
+  document.querySelectorAll('[data-rule-text]').forEach(input => input.oninput = () => { rules[Number(input.dataset.ruleText)].text = input.value; markFormEdit(); });
+  document.querySelectorAll('[data-rule-delete]').forEach(button => button.onclick = () => { rules.splice(Number(button.dataset.ruleDelete), 1); markFormEdit(); renderRules(); });
 }
 $('#add-rule').onclick = () => {
   if (rules.length >= 8) { status('最多添加 8 条规则。', true); return; }
-  rules.push({ id: crypto.randomUUID(), text: '', enabled: true }); renderRules();
+  rules.push({ id: crypto.randomUUID(), text: '', enabled: true }); markFormEdit(); renderRules();
   document.querySelector('[data-rule-text]:last-of-type')?.focus();
 };
 $('#filter-threshold').oninput = () => { $('#threshold-label').textContent = `${$('#filter-threshold').value}%`; };
@@ -94,9 +117,18 @@ async function ensureOrigin(baseUrl) {
 $('#test-model').onclick = async () => {
   const button = $('#test-model');
   const result = $('#test-result');
+  if (button.disabled) return;
   stashActiveProvider();
   const id = activeProvider();
   const draft = providerDrafts[id];
+  // 结果绑定发起时的配置与表单版本：中途切换或编辑后晚到的结果不再回写。
+  const run = ++testRun;
+  const version = formVersion;
+  const stillCurrent = () => run === testRun && version === formVersion && id === activeProvider();
+  const discard = () => {
+    result.textContent = id === activeProvider() ? '表单已修改，先前的测试结果已忽略。' : '已切换配置，先前的测试结果已忽略。';
+    result.classList.remove('error', 'ok');
+  };
   button.disabled = true;
   result.textContent = '测试中……';
   result.classList.remove('error', 'ok');
@@ -105,9 +137,12 @@ $('#test-model').onclick = async () => {
     ensureOriginSyncCheck(baseUrl);
     await ensureOrigin(baseUrl);
     const data = await send('TEST_MODEL', { payload: { provider: id, label: draft.label, kind: draft.kind, baseUrl, model: draft.model, key: draft.key } });
+    // 连接测试只读：不写入任何配置，也不把结果贴到别的配置上。
+    if (!stillCurrent()) { discard(); return; }
     result.textContent = data.message;
     result.classList.add('ok');
   } catch (error) {
+    if (!stillCurrent()) { discard(); return; }
     result.textContent = error.message;
     result.classList.add('error');
   } finally {
@@ -169,6 +204,10 @@ async function settingsPayload() {
   };
 }
 async function saveSettings() {
+  if (saving) return; // 重复点击不重复提交
+  saving = true;
+  const buttons = [$('#save-main'), $('#save-filter')].filter(Boolean);
+  buttons.forEach(button => { button.disabled = true; });
   try {
     const payload = await settingsPayload();
     if (payload.filterEnabled && (!payload.jevKey || !payload.filterRules.some(rule => rule.enabled && rule.text.trim()))) throw new Error('开启筛选前，请填写 Jev Key 并启用至少一条规则。');
@@ -183,9 +222,11 @@ async function saveSettings() {
       if (draft?.label) option.text = draft.label;
     }
     renderModelHint();
+    setDirty(false); // 保存成功才生效，也才清掉「未保存」标记；失败保留原配置与输入
     status('已保存。已打开的 X 页面会立即应用新的筛选与写作设置。');
     refreshJevDiagnostics();
   } catch (error) { status(error.message, true); }
+  finally { saving = false; buttons.forEach(button => { button.disabled = false; }); }
 }
 $('#save-main').onclick = saveSettings;
 $('#save-filter').onclick = saveSettings;
@@ -288,7 +329,9 @@ $('#import-backup').onchange = async event => {
     const archive = JSON.parse(await file.text());
     const counts = await send('BACKUP', { payload: { op: 'preview', archive } });
     importArchive = archive;
-    $('#backup-preview').textContent = '将合并：' + counts.sessions + ' 个帖子会话、' + counts.drafts + ' 份写作草稿、' + counts.cards + ' 条收藏、' + counts.memories + ' 条学习记录。冲突内容另存，不删除原记录。MDX 需重新导入，密钥不迁移。';
+    $('#backup-preview').textContent = '将合并：' + counts.sessions + ' 个帖子会话、' + counts.drafts + ' 份写作草稿、'
+      + counts.cards + ' 条收藏、' + counts.memories + ' 条学习记录。导入 ' + counts.imported
+      + ' 项、跳过 ' + counts.skipped + ' 项、另存 ' + counts.extra + ' 项。冲突内容另存，不删除原记录。MDX 需重新导入，密钥不迁移。';
     $('#confirm-import').hidden = false;
   } catch (error) { status(error.message, true); }
 };
@@ -297,26 +340,93 @@ $('#confirm-import').onclick = async () => {
   $('#confirm-import').disabled = true;
   try {
     const result = await send('BACKUP', { payload: { op: 'import', archive: importArchive } });
-    status('数据已合并。' + result.dictionary + ' 请刷新设置页查看导入的配置。');
+    status('数据已合并：导入 ' + result.imported + ' 项、跳过 ' + result.skipped + ' 项、另存 ' + result.extra
+      + ' 项。' + result.dictionary + ' 请刷新设置页查看导入的配置。');
     importArchive = null; $('#confirm-import').hidden = true; await listSessions();
   } catch (error) { status(error.message, true); }
   finally { $('#confirm-import').disabled = false; }
 };
+// ---------- 历史记录：摘要 / 搜索 / 最近 20 条 / 原帖链接 / 冲突可见 ----------
+const SESSION_PAGE = 20;
+let sessionRows = [];
+let sessionQuery = '';
+let sessionLimit = SESSION_PAGE;
+
+function sessionSummary(item) {
+  const data = item?.data || {};
+  const parts = [data.draft, data.selected, data.reply, data.draftNote,
+    data.readingInput && typeof data.readingInput.manualText === 'string' ? data.readingInput.manualText : '']
+    .filter(value => typeof value === 'string' && value.trim());
+  return parts.map(value => value.trim().replace(/\s+/g, ' ')).join(' · ').slice(0, 160) || '（没有可展示的草稿正文）';
+}
+function sessionHref(item) {
+  const match = /^post:(\d+)$/.exec(item?.key || '') || /^post:(\d+)$/.exec(item?.sourceKey || '');
+  return match ? 'https://x.com/i/status/' + match[1] : '';
+}
+function sessionMatches(item, query) {
+  if (!query) return true;
+  const haystack = [item.key, item.sourceKey || '', sessionSummary(item), JSON.stringify(item.data || {})].join('\n').toLowerCase();
+  return haystack.includes(query);
+}
+function sessionCard(item) {
+  const row = document.createElement('div'); row.className = 'session-item';
+  const label = document.createElement('b');
+  label.textContent = (item.sourceKey ? '冲突副本 · ' + item.sourceKey : item.key) + ' · ' + new Date(item.updatedAt).toLocaleString();
+  const summary = document.createElement('p'); summary.className = 'session-summary'; summary.textContent = sessionSummary(item);
+  row.append(label, summary);
+  const href = sessionHref(item);
+  if (href) {
+    const link = document.createElement('a');
+    link.href = href; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = '原帖 ↗';
+    row.append(link);
+  }
+  const draft = typeof item.data?.draft === 'string' ? item.data.draft : '';
+  const copy = document.createElement('button'); copy.type = 'button'; copy.textContent = '复制草稿'; copy.disabled = !draft;
+  copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(draft); status('草稿已复制到剪贴板。'); }
+    catch (error) { status('复制失败：' + error.message, true); }
+  };
+  row.append(copy);
+  // 原始 JSON 折叠为技术详情，默认收起，不占版面也不泄露到摘要里。
+  const preview = document.createElement('details'), summaryTag = document.createElement('summary'), text = document.createElement('pre');
+  summaryTag.textContent = '技术详情'; text.textContent = JSON.stringify(item.data, null, 2); preview.append(summaryTag, text);
+  row.append(preview);
+  const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '删除此记录';
+  remove.onclick = async () => {
+    if (!confirm('删除此记录？此操作不可撤销，建议先导出备份。')) return;
+    try { await send('SESSION', { payload: { op: 'remove', key: item.key } }); await listSessions(); }
+    catch (error) { status(error.message, true); }
+  };
+  row.append(remove);
+  return row;
+}
+function renderSessions() {
+  const root = $('#session-list'); root.replaceChildren();
+  const matched = sessionRows.filter(item => sessionMatches(item, sessionQuery));
+  if (!matched.length) {
+    root.textContent = sessionRows.length ? '没有匹配的记录。' : '尚无保存的帖子会话。';
+    return;
+  }
+  const visible = matched.slice(0, sessionLimit);
+  for (const item of visible) root.append(sessionCard(item));
+  if (matched.length > visible.length) {
+    const more = document.createElement('button'); more.type = 'button'; more.textContent = '显示更多';
+    more.onclick = () => { sessionLimit += SESSION_PAGE; renderSessions(); };
+    root.append(more);
+  }
+}
 async function listSessions() {
   try {
     const sessions = await send('SESSION', { payload: { op: 'list' } });
-    const root = $('#session-list'); root.replaceChildren();
-    for (const item of sessions.sort((a,b) => b.updatedAt - a.updatedAt)) {
-      const row = document.createElement('div'); row.className = 'session-item';
-      const label = document.createElement('b'); label.textContent = (item.sourceKey ? '冲突副本 · ' + item.sourceKey : item.key) + ' · ' + new Date(item.updatedAt).toLocaleString();
-      const preview = document.createElement('details'), summary = document.createElement('summary'), text = document.createElement('pre');
-      summary.textContent = '查看保存的内容'; text.textContent = JSON.stringify(item.data, null, 2); preview.append(summary, text);
-      const remove = document.createElement('button'); remove.textContent = '删除此记录';
-      remove.onclick = async () => { if (!confirm('删除此记录？建议先导出备份。')) return; try { await send('SESSION', { payload: { op: 'remove', key: item.key } }); await listSessions(); } catch (error) { status(error.message, true); } };
-      row.append(label, preview, remove); root.append(row);
-    }
-    if (!sessions.length) root.textContent = '尚无保存的帖子会话。';
+    sessionRows = sessions.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    renderSessions();
   } catch (error) { status(error.message, true); }
 }
+const sessionSearch = $('#session-search');
+sessionSearch.addEventListener('input', () => {
+  sessionQuery = sessionSearch.value.trim().toLowerCase();
+  sessionLimit = SESSION_PAGE;
+  renderSessions();
+});
 $('#refresh-sessions').onclick = listSessions;
 listSessions();

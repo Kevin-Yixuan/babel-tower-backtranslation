@@ -1,8 +1,11 @@
-import { exportBackup, importBackup, validateBackup } from './services/backup.js';
-import { normalizeSettings, validateProviders, modelFetch } from './services/settings.js';
+import { exportBackup, importBackup, previewBackup } from './services/backup.js';
+import {
+  modelFetch, readSettings, readApiKeys,
+  publicSettings as publicSettingsOf, saveSettings as saveSettingsToStorage
+} from './services/settings.js';
 import { sessionOp } from './services/sessions.js';
 import {
-  DEFAULT_SETTINGS, PROVIDERS, PROVIDER_IDS, matchingRule, normalizeWord, responseText,
+  PROVIDERS, PROVIDER_IDS, matchingRule, normalizeWord, responseText,
   assertTextLimit, normalizeBaseUrl, joinUrl, buildChatRequest, chatText, extractJson,
   classifyModelHttpError, validateJevAnswers, assertStructuredResult,
   MAX_REFERENCE_CHARS, MAX_DRAFT_CHARS
@@ -69,7 +72,7 @@ async function handle(message, sender) {
     case 'BACKUP': {
       if (!isExtensionPage(sender)) throw fail('请在设置页管理备份。');
       if (message.payload?.op === 'export') return exportBackup();
-      if (message.payload?.op === 'preview') return validateBackup(message.payload.archive);
+      if (message.payload?.op === 'preview') return previewBackup(message.payload.archive);
       if (message.payload?.op === 'import') return importBackup(message.payload.archive);
       throw fail('未知备份操作。');
     }
@@ -84,7 +87,7 @@ async function handle(message, sender) {
       return privateSettings();
     case 'SAVE_SETTINGS':
       if (!isExtensionPage(sender)) throw fail('设置只能在设置页中修改。');
-      return saveSettings(message.payload);
+      return saveSettingsToStorage(message.payload, STORAGE);
     case 'TEST_MODEL':
       if (!isExtensionPage(sender)) throw fail('连接测试只能在设置页中使用。');
       return testModel(message.payload);
@@ -138,18 +141,10 @@ async function storeOp(payload) {
 
 // ---------- settings & provider config ----------
 
-async function loadSettings() {
-  const { settings: stored } = await STORAGE.get('settings');
-  const settings = normalizeSettings(stored || {});
-  return settings;
-}
+// 设置的读写只有一份实现（services/settings.js）；这里只把 chrome.storage.local 交给它。
+async function loadSettings() { return readSettings(STORAGE); }
 
-async function loadApiKeys() {
-  const { apiKeys = {}, openaiKey = '' } = await STORAGE.get(['apiKeys', 'openaiKey']);
-  const keys = { ...apiKeys };
-  if (openaiKey && !keys.openai) { keys.openai = openaiKey; await STORAGE.set({ apiKeys: keys }); }
-  return keys;
-}
+async function loadApiKeys() { return readApiKeys(STORAGE); }
 
 function providerConfig(settings, id = settings.modelProvider) {
   const providerId = Object.hasOwn(settings.providers, id) ? id : settings.modelProvider;
@@ -169,49 +164,9 @@ async function privateSettings() {
   };
 }
 
-async function publicSettings() {
-  const [settings, apiKeys] = await Promise.all([loadSettings(), loadApiKeys()]);
-  const { jevKey = '', glossary = {} } = await STORAGE.get(['jevKey', 'glossary']);
-  return {
-    ...settings,
-    hasModel: Boolean(apiKeys[settings.modelProvider]),
-    hasOpenAI: Boolean(apiKeys.openai),
-    hasJev: Boolean(jevKey),
-    glossaryCount: Object.keys(glossary).length
-  };
-}
+async function publicSettings() { return publicSettingsOf(STORAGE); }
 
-async function saveSettings(payload) {
-  if (!payload || typeof payload !== 'object') throw fail('设置格式有误。');
-  const previous = await loadSettings();
-  const settings = {
-    schemaVersion: 2,
-    autoTranslate: payload.autoTranslate ?? previous.autoTranslate,
-    hoverLookup: payload.hoverLookup ?? previous.hoverLookup,
-    modelProvider: payload.modelProvider || previous.modelProvider,
-    providers: {},
-    targetLanguage: clean(payload.targetLanguage || '英语', 30),
-    filterEnabled: Boolean(payload.filterEnabled),
-    filterRules: Array.isArray(payload.filterRules) ? payload.filterRules.slice(0, 8).map((rule, index) => ({ id: clean(rule.id || `rule-${index}`, 40), text: clean(rule.text, 180), enabled: Boolean(rule.enabled) })).filter(rule => rule.text) : [],
-    filterThreshold: Math.max(0.65, Math.min(0.98, Number(payload.filterThreshold) || DEFAULT_SETTINGS.filterThreshold)),
-    filterDailyLimit: Math.max(10, Math.min(200, Number(payload.filterDailyLimit) || 80))
-  };
-  settings.providers = validateProviders(payload.providers || previous.providers);
-  if (!Object.hasOwn(settings.providers, settings.modelProvider)) throw fail('当前模型配置不存在。');
-  settings.model = settings.providers.openai?.model || previous.model;
-  const apiKeys = await loadApiKeys();
-  for (const id of Object.keys(settings.providers)) {
-    // undefined = caller didn't send this slot (keep stored); empty string = explicit clear
-    const incoming = payload.apiKeys?.[id];
-    const key = incoming === undefined ? (apiKeys[id] || '') : clean(incoming, 250);
-    if (key) apiKeys[id] = key; else delete apiKeys[id];
-  }
-  for (const id of Object.keys(apiKeys)) if (!Object.hasOwn(settings.providers, id)) delete apiKeys[id];
-  const jevKey = payload.jevKey === undefined ? (await STORAGE.get('jevKey')).jevKey || '' : clean(payload.jevKey, 250);
-  await STORAGE.set({ settings, apiKeys, jevKey });
-  await STORAGE.remove('openaiKey'); // migrated into apiKeys
-  return publicSettings();
-}
+// 保存逻辑集中在 services/settings.js：设置页测试走同一条真实实现，不在测试里复刻后台。
 
 // ---------- unified model call ----------
 

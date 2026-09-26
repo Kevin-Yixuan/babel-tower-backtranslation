@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalizeSettings, validateProviders } from '../services/settings.js';
+import { normalizeSettings, saveSettings } from '../services/settings.js';
 import { classifyModelHttpError } from '../shared.js';
 import { exportBackup } from '../services/backup.js';
 
@@ -233,48 +233,38 @@ function buildDocument() {
     'confirm-import', 'refresh-sessions']) {
     element(doc, 'button', { id });
   }
+  element(doc, 'input', { id: 'session-search', type: 'search' });
   for (const id of ['status', 'rules', 'jev-diagnostics', 'test-result', 'active-config', 'mdx-root',
-    'saved-list', 'session-list', 'backup-preview', 'glossary-count', 'threshold-label', 'model-hint']) {
+    'saved-list', 'session-list', 'backup-preview', 'glossary-count', 'threshold-label', 'model-hint',
+    'settings-dirty-status']) {
     element(doc, id === 'test-result' ? 'span' : 'div', { id });
   }
   return doc;
 }
 
-// ---------- chrome 桩 + 后台最小复刻 ----------
+// ---------- chrome 桩 ----------
+// 保存走 services/settings.js 的真实实现（与后台同一条链路），这里只替换存储与网络等系统接口。
 
-function saveSettingsLikeBackground(page, payload) {
-  if (!payload || typeof payload !== 'object') throw new Error('设置格式有误。');
-  const previous = normalizeSettings(page.store.settings || {});
-  const settings = {
-    schemaVersion: 2,
-    autoTranslate: payload.autoTranslate ?? previous.autoTranslate,
-    hoverLookup: payload.hoverLookup ?? previous.hoverLookup,
-    modelProvider: payload.modelProvider || previous.modelProvider,
-    providers: {},
-    targetLanguage: String(payload.targetLanguage || '英语').slice(0, 30),
-    filterEnabled: Boolean(payload.filterEnabled),
-    filterRules: Array.isArray(payload.filterRules) ? payload.filterRules.filter(rule => rule && rule.text).slice(0, 8) : [],
-    filterThreshold: Math.max(0.65, Math.min(0.98, Number(payload.filterThreshold) || 0.82)),
-    filterDailyLimit: Math.max(10, Math.min(200, Number(payload.filterDailyLimit) || 80))
-  };
-  settings.providers = validateProviders(payload.providers || previous.providers);
-  if (!Object.hasOwn(settings.providers, settings.modelProvider)) throw new Error('当前模型配置不存在。');
-  settings.model = settings.providers.openai?.model || previous.model;
-  const apiKeys = { ...page.store.apiKeys };
-  for (const id of Object.keys(settings.providers)) {
-    const incoming = payload.apiKeys?.[id];
-    const key = incoming === undefined ? (apiKeys[id] || '') : String(incoming).slice(0, 250);
-    if (key) apiKeys[id] = key; else delete apiKeys[id];
-  }
-  for (const id of Object.keys(apiKeys)) if (!Object.hasOwn(settings.providers, id)) delete apiKeys[id];
-  page.store.settings = settings;
-  page.store.apiKeys = apiKeys;
+function makeStorageLocal(page) {
   return {
-    ...settings,
-    hasModel: Boolean(apiKeys[settings.modelProvider]),
-    hasOpenAI: Boolean(apiKeys.openai),
-    hasJev: Boolean(page.store.jevKey),
-    glossaryCount: 0
+    async get(keys) {
+      const out = {};
+      for (const key of [].concat(keys)) {
+        if (key === 'settings') out.settings = structuredClone(page.store.settings);
+        else if (key === 'jevKey') out.jevKey = page.store.jevKey;
+        else if (key === 'apiKeys') out.apiKeys = { ...page.store.apiKeys };
+        else if (key === 'openaiKey') out.openaiKey = page.store.openaiKey || '';
+        else if (key === 'glossary') out.glossary = page.store.glossary || {};
+        else if (Object.hasOwn(page.store, key)) out[key] = structuredClone(page.store[key]);
+      }
+      return out;
+    },
+    async set(values) {
+      for (const [key, value] of Object.entries(values)) page.store[key] = structuredClone(value);
+    },
+    async remove(keys) {
+      for (const key of [].concat(keys)) delete page.store[key];
+    }
   };
 }
 
@@ -327,20 +317,7 @@ function makeChrome(page) {
       }
     },
     tabs: { create: options => { page.tabCreates.push(options); return options; } },
-    storage: {
-      local: {
-        async get(keys) {
-          const out = {};
-          for (const key of [].concat(keys)) {
-            if (key === 'settings') out.settings = structuredClone(page.store.settings);
-            else if (key === 'jevKey') out.jevKey = page.store.jevKey;
-            else if (key === 'apiKeys') out.apiKeys = { ...page.store.apiKeys };
-          }
-          return out;
-        },
-        async set() {}
-      }
-    }
+    storage: { local: page.storageLocal }
   };
 }
 
@@ -370,7 +347,8 @@ async function route(page, message) {
     case 'SESSION': return [];
     case 'IMPORT_GLOSSARY': return { count: 0 };
     case 'DELETE_CARD': return null;
-    case 'SAVE_SETTINGS': return saveSettingsLikeBackground(page, message.payload);
+    // 真实生产保存逻辑（services/settings.js），与后台同一条实现。
+    case 'SAVE_SETTINGS': return saveSettings(message.payload, page.storageLocal);
     case 'TEST_MODEL': return page.testModel(message.payload);
     case 'BACKUP':
       if (message.payload?.op === 'export') return exportBackup();
@@ -407,8 +385,11 @@ async function openPage(store = makeStore()) {
     blobs: []
   };
   page.route = message => route(page, message);
+  page.storageLocal = makeStorageLocal(page);
   page.document = buildDocument();
   globalThis.document = page.document;
+  // 系统接口替身：离开提示只在有未保存修改时触发（真实行为由浏览器回归覆盖）。
+  globalThis.window = { listeners: {}, addEventListener(type, handler) { (this.listeners[type] ||= []).push(handler); }, removeEventListener() {} };
   globalThis.chrome = makeChrome(page);
   globalThis.confirm = () => page.confirmAnswer;
   currentBlobSink = page.blobs;
