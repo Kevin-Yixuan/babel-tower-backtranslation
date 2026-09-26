@@ -1,4 +1,5 @@
 // User-authored work is never evicted. Model results can be cleared explicitly in settings.
+import './session-fields.js';
 let opening;
 const request = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
 function database() {
@@ -10,8 +11,7 @@ function database() {
   });
   return opening;
 }
-const fields = ['selected', 'dictionary', 'explanation', 'reading', 'practice', 'practiceAnswer', 'practiceFeedback',
-  'revision', 'revisionFeedback', 'idea', 'draft', 'draftNote', 'replyFeedback', 'draftCandidate', 'draftPostUrl', 'target', 'tone', 'reply', 'insertMode'];
+const fields = globalThis.BXSessionFields;
 export function cleanSnapshot(value) {
   const data = {};
   if (!value || typeof value !== 'object') throw new Error('会话内容格式错误。');

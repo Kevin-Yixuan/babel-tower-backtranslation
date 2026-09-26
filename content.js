@@ -29,7 +29,8 @@
     translate.className = 'bx-inline-button bx-entry';
     translate.dataset.bxEntry = 'read';
     translate.textContent = '翻译';
-    translate.onclick = event => { event.preventDefault(); event.stopPropagation(); window.BX.emit('translate-full', {}); openForPost(article, 'read'); };
+    // 先切到本帖会话，再发翻译意图：意图必须落到被点击的帖子，不能写进上一帖的会话。
+    translate.onclick = event => { event.preventDefault(); event.stopPropagation(); openForPost(article, 'read'); window.BX.emit('translate-full', {}); };
     const reply = document.createElement('button');
     reply.type = 'button';
     reply.className = 'bx-entry bx-entry-reply';

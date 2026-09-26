@@ -1,8 +1,6 @@
 (() => {
   const BX = window.BX, state = BX.state;
-  const fields = ['selected', 'dictionary', 'explanation', 'reading', 'practice', 'practiceAnswer', 'practiceFeedback',
-    'revision', 'revisionFeedback', 'idea', 'draft', 'draftNote', 'replyFeedback', 'draftCandidate', 'draftPostUrl',
-    'target', 'tone', 'reply', 'insertMode'];
+  const fields = window.BXSessionFields;
   const defaults = Object.fromEntries(fields.filter(f => state[f] !== undefined).map(f => [f, structuredClone(state[f])]));
   const DEBOUNCE_MS = 400;
   const slots = new Map();
@@ -11,7 +9,7 @@
 
   function newSlot(key) {
     return { key, storageKey: key, revision: 0, signature: '', queue: Promise.resolve(), data: null,
-      failed: false, dirty: false, timer: null };
+      failed: false, dirty: false, touched: new Set(), timer: null };
   }
   function snapshot() {
     const data = {};
@@ -81,21 +79,28 @@
     // baseline 记录本次访问重置后的字段值：与 baseline 不同的字段=恢复窗口内的新输入，旧记录不得覆盖。
     for (const field of fields) {
       if (!Object.hasOwn(record.data, field)) continue;
-      if (slot.dirty && baseline && JSON.stringify(state[field]) !== JSON.stringify(baseline[field])) continue;
+      if (slot.touched.has(field) || (slot.dirty && baseline && JSON.stringify(state[field]) !== JSON.stringify(baseline[field]))) continue;
       state[field] = structuredClone(record.data[field]);
     }
     slot.revision = record.revision; slot.data = record.data;
   }
-  function switchTo(post, apply) {
+  function applyEdits(slot, edits) {
+    if (!edits) return;
+    for (const field of fields) if (Object.hasOwn(edits, field)) {
+      state[field] = structuredClone(edits[field]);
+      if (slot) { slot.touched.add(field); slot.dirty = true; }
+    }
+  }
+  function switchTo(post, apply, edits) {
     const key = window.BXContext.key(post?.url || '');
     if (!key) {
       // 无稳定 ID（首页/外站/识别失败的链接）：不归属任何会话。
       // 恢复进行中 → 挂起等旧帖落盘后再脱离，避免旧记录覆盖新页面状态；
       // 否则立即落盘旧帖并脱离槽位，此后输入/模块清理绝不再写进上一帖的记录。
-      if (restoring) { pendingSwitch = { post, apply }; return; }
+      if (restoring) { pendingSwitch = { post, apply, edits }; return; }
       if (current) save(true);
       pendingSwitch = null;
-      apply(post);
+      apply(post); applyEdits(null, edits);
       current = null;
       updateStatus();
       return;
@@ -106,11 +111,12 @@
       const priorText = state.post?.text;
       state.post = post?.text ? post : { ...post, text: state.post?.text || '', author: post?.author || state.post?.author || '' };
       if (state.post?.text !== priorText) BX.emit('source-updated', { post: state.post });
+      applyEdits(current, edits);
       return;
     }
     if (restoring) {
       // 旧帖恢复仍在进行：挂起本次切换，按“最近意图”执行，避免旧恢复覆盖新帖状态。
-      pendingSwitch = { post, apply };
+      pendingSwitch = { post, apply, edits };
       return;
     }
     save(true); // 旧帖立即落盘（清掉防抖定时器）
@@ -133,7 +139,9 @@
     slots.set(key, current);
     const slot = current;
     slot.dirty = false;
+    slot.touched.clear();
     baseline = Object.fromEntries(fields.map(f => [f, state[f] === undefined ? undefined : structuredClone(state[f])]));
+    applyEdits(slot, edits);
     state.sessionLoading = true;
     ready = (async () => {
       await slot.queue;
@@ -152,7 +160,7 @@
         if (slot.signature === '') save(true);
         updateStatus();
         BX.emit('session-ready', {}); BX.refresh();
-        if (pendingSwitch) { const next = pendingSwitch; pendingSwitch = null; switchTo(next.post, next.apply); }
+        if (pendingSwitch) { const next = pendingSwitch; pendingSwitch = null; switchTo(next.post, next.apply, next.edits); }
       });
     BX.refresh();
   }
@@ -163,5 +171,5 @@
   BX.element.addEventListener('input', onInput);
   document.addEventListener('visibilitychange', () => { if (document.hidden) flushAll(); });
   window.addEventListener('pagehide', flushAll);
-  window.BXSession = { switchTo, save, get ready() { return ready; }, get key() { return current?.key || ''; } };
+  window.BXSession = { switchTo, save, touch(field) { if (current && fields.includes(field)) { current.touched.add(field); current.dirty = true; } }, get ready() { return ready; }, get key() { return current?.key || ''; } };
 })();

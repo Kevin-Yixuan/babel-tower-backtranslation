@@ -29,6 +29,7 @@
       "js": [
         "sidebar/context.js",
         "sidebar/sidebar.js",
+        "services/session-fields.js",
         "sidebar/sessions.js",
         "modules/reading/reading.js",
         "modules/reading/hover-lookup.js",

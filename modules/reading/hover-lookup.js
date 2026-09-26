@@ -14,12 +14,9 @@
     const nodes = []; let n, text = '', position = -1;
     while ((n = walker.nextNode())) { if (n === node) position = text.length + offset; nodes.push({ node:n, start:text.length }); text += n.data; }
     if (position < 0) return null;
-    let start = position, end = position;
-    const isWord = c => Boolean(c && /[A-Za-z'’-]/.test(c));
-    while (start > 0 && isWord(text[start-1])) start--;
-    while (end < text.length && isWord(text[end])) end++;
-    const word = text.slice(start,end).replace(/^['’-]+|['’-]+$/g,'');
-    if (!/^[A-Za-z][A-Za-z'’-]{0,79}$/.test(word)) return null;
+    const hit = window.BXWordBoundary?.(text, position);
+    if (!hit) return null;
+    const { word, start, end } = hit;
     const first = nodes.find(v => start >= v.start && start < v.start + v.node.length);
     const final = nodes.find(v => end > v.start && end <= v.start + v.node.length);
     if (!first || !final) return null;

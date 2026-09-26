@@ -146,7 +146,7 @@ function installChromeMock(store) {
 // ---------- 加载真实 context.js / sidebar/sessions.js（无 DOM，纯桩） ----------
 function loadScript(relativePath, win, doc, loc) {
   const code = fs.readFileSync(path.join(root, relativePath), 'utf8');
-  new Function('window', 'document', 'location', code)(win, doc, loc);
+  new Function('window', 'document', 'location', 'globalThis', code)(win, doc, loc, win);
   return win;
 }
 function loadContext() {
@@ -158,7 +158,7 @@ function createHarness(options = {}) {
   const opts = { slowGetMs: 0, failSaves: 0, failMessage: '', ...options };
   const counters = { refresh: 0, emits: [], saves: 0, gets: 0, saveKeys: [] };
   const state = {
-    mode: 'read', post: null, selected: '', editor: null, busy: false, error: '', notice: '',
+    mode: 'read', post: null, selected: '', readingInput: { scope: 'full', manualText: '', source: '自动检测', target: '中文' }, editor: null, busy: false, error: '', notice: '',
     dictionary: null, explanation: '', practice: null, practiceAnswer: '', practiceFeedback: null,
     revision: '', revisionFeedback: null, idea: '', draft: '', draftNote: '', replyFeedback: null,
     target: '英语', tone: '自然', insertConfirm: false, binding: null, reqSeq: 0,
@@ -197,6 +197,7 @@ function createHarness(options = {}) {
   const doc = { hidden: false, addEventListener: (type, fn) => { handlers.document[type] = fn; } };
   const loc = { origin: 'https://x.com' };
   loadScript('sidebar/context.js', win, doc, loc);
+  loadScript('services/session-fields.js', win, doc, loc);
   loadScript('sidebar/sessions.js', win, doc, loc);
   return {
     state, win, counters, label, opts,
@@ -475,6 +476,39 @@ test('恢复期间的新输入不被旧记录覆盖，且最终入库', async ()
   const stored = await sessionOp({ op: 'get', key: 'post:111' });
   assert.equal(stored.data.draft, '键入中', '合并后的输入已入库');
   assert.equal(stored.data.practiceAnswer, '作答A');
+  await removeAllSessions();
+});
+
+test('恢复期间的新选句优先于旧选句，且切帖后只进入所属会话', async () => {
+  await removeAllSessions();
+  await seed('post:111', { selected: '旧选句', readingInput: { scope: 'selection', manualText: '', source: '英语', target: '中文' } });
+  const h = createHarness({ slowGetMs: 40 });
+  h.win.BXSession.switchTo(POST_A, h.apply, { selected: '新选句' });
+  await h.win.BXSession.ready;
+  assert.equal(h.state.selected, '新选句');
+  await h.win.BXSession.save(true);
+  assert.equal((await sessionOp({ op: 'get', key: 'post:111' })).data.selected, '新选句');
+  h.win.BXSession.switchTo(POST_B, h.apply);
+  await h.win.BXSession.ready;
+  assert.equal(h.state.selected, '');
+  await removeAllSessions();
+});
+
+test('三种阅读取材状态与未提交手动原稿随会话保存，旧会话字段保持兼容', async () => {
+  await removeAllSessions();
+  const h = createHarness();
+  h.win.BXSession.switchTo(POST_A, h.apply);
+  await h.win.BXSession.ready;
+  h.state.readingInput = { scope: 'manual', manualText: '尚未翻译的原稿', source: '日语', target: '中文' };
+  await h.win.BXSession.save(true);
+  const fresh = createHarness();
+  fresh.win.BXSession.switchTo(POST_A, fresh.apply);
+  await fresh.win.BXSession.ready;
+  assert.deepEqual(fresh.state.readingInput, h.state.readingInput);
+  fresh.win.BXSession.switchTo(POST_B, fresh.apply);
+  await fresh.win.BXSession.ready;
+  assert.equal(fresh.state.readingInput.scope, 'full');
+  assert.equal(fresh.state.readingInput.manualText, '');
   await removeAllSessions();
 });
 

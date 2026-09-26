@@ -7,7 +7,7 @@
 
   // ---- 共享状态（字段归属见协议 §2；新字段必须带模块前缀） ----
   const state = {
-    mode: 'read', post: null, selected: '', editor: null, busy: false, error: '', notice: '',
+    mode: 'read', post: null, selected: '', readingInput: { scope: 'full', manualText: '', source: '自动检测', target: '中文' }, editor: null, busy: false, error: '', notice: '',
     dictionary: null, explanation: '', practice: null, practiceAnswer: '', practiceFeedback: null,
     revision: '', revisionFeedback: null, idea: '', draft: '', draftNote: '', replyFeedback: null,
     target: '英语', tone: '自然', cards: [], settings: null, insertConfirm: false,
@@ -181,7 +181,7 @@
   function openForPost(article, tabId) {
     setPost(postFrom(article), { reset: true }); open(tabId);
   }
-  function setPost(post, { reset = false } = {}) {
+  function setPost(post, { reset = false, selected, readingInput } = {}) {
     const apply = next => {
       const prev = state.post; state.post = next;
       if (reset) {
@@ -190,7 +190,8 @@
         emit('post-change', { post: next });
       }
     };
-    if (window.BXSession && post) window.BXSession.switchTo(post, apply); else apply(post);
+    const edits = selected === undefined && readingInput === undefined ? undefined : { ...(selected === undefined ? {} : { selected }), ...(readingInput === undefined ? {} : { readingInput }) };
+    if (window.BXSession && post) window.BXSession.switchTo(post, apply, edits); else { apply(post); if (edits) Object.assign(state, edits); }
   }
 
   // ---- content.js 回调 ----
