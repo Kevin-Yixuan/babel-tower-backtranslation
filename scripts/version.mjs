@@ -1,5 +1,6 @@
 // 版本号规则：Chromium 扩展的四段数字版本 + 本项目 release tag 形状。
-// update-unpacked.ps1 只识别 ^v(\d+\.\d+\.\d+(?:\.\d+)?)$，所以发布版本必须 3 或 4 段。
+// release tag 统一为 ^v(\d+\.\d+\.\d+(?:\.\d+)?)$，所以发布版本必须 3 或 4 段。
+// （历史上本地更新脚本也用同一正则；该脚本已退役，这里只约束 tag 形状。）
 
 export const CHROMIUM_SEGMENT_MAX = 65535;
 
@@ -47,12 +48,12 @@ export function isStrictlyNewer(candidate, current) {
   return compareVersion(candidate, current) > 0;
 }
 
-// 发布版本在满足 Chromium 规则之外，还必须能被更新脚本的 tag 正则识别。
+// 发布版本在满足 Chromium 规则之外，还必须能被 release tag 正则识别（vX.Y.Z / vX.Y.Z.W）。
 export function assertReleaseVersion(raw) {
   const segments = parseVersion(raw);
   if (segments.length < 3) {
     throw new Error(
-      `发布版本至少三段（vX.Y.Z）：${raw}。update-unpacked.ps1 只识别 vX.Y.Z 与 vX.Y.Z.W。`
+      `发布版本至少三段（vX.Y.Z）：${raw}。release tag 只识别 vX.Y.Z 与 vX.Y.Z.W。`
     );
   }
   return segments;

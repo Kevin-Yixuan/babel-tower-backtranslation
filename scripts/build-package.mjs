@@ -5,14 +5,18 @@
 //                                  [--previous 0.2.2] [--skip-remote-check]
 //                                  [--version-gate fail|warn]
 //                                  [--layout preview|store]
+//                                  [--branch main]
 //
 // 只写 --out 目录，不改动仓库里任何源文件。
 // --layout preview（默认）：ZIP 第一层是 babel-tower-backtranslation-<版本>/ 单一目录，
 //   用于 GitHub Release 解压安装。
 // --layout store：文件平铺在 ZIP 根（manifest.json 在第一层），用于 Chrome Web Store
-//   提交候选包。
-// 版本查询（git ls-remote --tags origin）失败时默认阻断构建；只有显式
+//   提交候选包；产物名带 -store 后缀。
+// 版本查询（git ls-remote --tags origin）失败时阻断构建；只有显式
 // --skip-remote-check 或显式 --previous 才允许跳过远端查询。
+// --branch <名>：分支门禁。当前分支（CI 里取 GITHUB_REF_NAME）必须等于指定值，
+//   否则拒绝构建。发布候选（含商店候选）必须由通过必需检查并合并的 main 产出；
+//   feature 分支的自测构建不带 --branch 或使用自己的分支名。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -23,7 +27,7 @@ import { assertReleaseVersion, compareVersion, latestReleaseVersion, tagOf } fro
 import { createZipFile } from './zip.mjs';
 import {
   INSTALL_DOC_CANDIDATES,
-  MARKER_FILE,
+  LAYOUTS,
   ROOT_FILES,
   RUNTIME_DIRS,
   checksumName,
@@ -39,7 +43,9 @@ function parseArgs(argv) {
     out: 'dist',
     previous: null,
     skipRemoteCheck: false,
-    versionGate: 'fail'
+    versionGate: 'fail',
+    layout: 'preview',
+    branch: null
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -49,12 +55,34 @@ function parseArgs(argv) {
     else if (arg === '--previous') options.previous = value();
     else if (arg === '--skip-remote-check') options.skipRemoteCheck = true;
     else if (arg === '--version-gate') options.versionGate = value();
+    else if (arg === '--layout') options.layout = value();
+    else if (arg === '--branch') options.branch = value();
     else throw new Error(`未知参数：${arg}`);
   }
   if (!['fail', 'warn'].includes(options.versionGate)) {
     throw new Error('--version-gate 只接受 fail 或 warn');
   }
+  if (!LAYOUTS.includes(options.layout)) {
+    throw new Error(`--layout 只接受 ${LAYOUTS.join(' 或 ')}`);
+  }
   return options;
+}
+
+// 解析当前分支：CI 里 checkout 常是 detached HEAD，用 GITHUB_REF_NAME；本地用
+// git symbolic-ref。两者都拿不到时返回 null（由调用方决定是否放行）。
+function currentBranch(root) {
+  const refName = process.env.GITHUB_REF_NAME;
+  if (refName) return refName.replace(/^refs\/heads\//, '');
+  try {
+    const head = execFileSync('git', ['symbolic-ref', '--short', '-q', 'HEAD'], {
+      cwd: root,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    return head || null;
+  } catch {
+    return null;
+  }
 }
 
 function readJson(file) {
@@ -112,15 +140,31 @@ function main() {
     throw new Error(`manifest_version 必须是 3，当前为 ${manifest.manifest_version}`);
   }
 
-  // 版本必须严格递增，否则更新脚本会拒绝、用户也会装到旧包。
+  // 分支门禁：发布候选（含 Chrome Web Store 提交候选）只能来自通过必需检查并
+  // 合并的 main。带 --branch 时，当前分支必须匹配，否则直接拒绝构建。
+  if (options.branch) {
+    const actual = currentBranch(options.root);
+    if (actual !== options.branch) {
+      throw new Error(
+        `分支门禁：要求在 ${options.branch} 上构建发布候选，当前分支为 ${actual ?? '未知（detached HEAD 且无 GITHUB_REF_NAME）'}。` +
+          'feature 分支只做自测构建，合并进 main 后由发布流水线产出候选包。'
+      );
+    }
+  }
+
+  // 版本必须严格递增，否则用户会装到旧包。
+  // 远端 tag 查询失败（离线、没有 origin、网络错误）同样阻断构建——
+  // 查不到已发布版本就无法证明递增性，候选包不允许在这种状态下产出。
   let previous = options.previous;
   if (previous === null && !options.skipRemoteCheck) {
     const tags = remoteTags(options.root);
     if (tags === null) {
-      warnings.push('无法读取远端 tag，跳过递增性检查（离线或没有 origin）');
-    } else {
-      previous = latestReleaseVersion(tags);
+      throw new Error(
+        '无法读取远端 tag（git ls-remote --tags origin 失败），无法校验版本递增性，已阻断构建。' +
+          '联网后重试；确实要离线自测时，显式传 --skip-remote-check 或 --previous <已发布版本>。'
+      );
     }
+    previous = latestReleaseVersion(tags);
   }
   if (previous) {
     const delta = compareVersion(manifest.version, previous);
@@ -159,23 +203,24 @@ function main() {
     }
   }
 
-  // 完成标记：与 manifest 同版本且 ready:true。仓库里那份只校验、不改写。
-  const markerSource = path.join(options.root, MARKER_FILE);
-  if (fs.existsSync(markerSource)) {
-    const marker = readJson(markerSource);
-    if (marker.ready !== true || compareVersion(String(marker.version ?? ''), manifest.version) !== 0) {
-      throw new Error(
-        `${MARKER_FILE} 与 manifest 不一致（标记 ${JSON.stringify(marker)}，manifest ${manifest.version}）。` +
-          '请让两者版本相同且 ready:true。'
-      );
+  // 已退役的本地自动更新机制不再参与构建：不写 update-marker.json，也不再读取
+  // 仓库里可能残留的同名文件。源码树里如果还有 update-unpacked.ps1 /
+  // update-marker.json，这里给出显式警告（白名单收集本来就不会把它们打进 ZIP）。
+  for (const retired of ['update-unpacked.ps1', 'update-marker.json']) {
+    if (fs.existsSync(path.join(options.root, retired))) {
+      warnings.push(`发现已退役的更新机制文件 ${retired}，不会进入发布包；请从源码树中移除`);
     }
   }
-  const marker = JSON.stringify({ version: manifest.version, ready: true });
 
-  // 落盘到 stage：ZIP 第一层只有一个扩展目录。
+  // 落盘到 stage。
+  // preview：ZIP 第一层只有一个扩展目录（babel-tower-backtranslation-<版本>/）。
+  // store：文件平铺在 ZIP 根，manifest.json 直接位于第一层，供 Chrome Web Store 上传。
   const outDir = options.out;
   const stageRoot = path.join(outDir, '.stage');
-  const payloadDir = path.join(stageRoot, packageDirName(manifest.version));
+  const payloadDir = options.layout === 'store'
+    ? path.join(stageRoot, 'store')
+    : path.join(stageRoot, packageDirName(manifest.version));
+  const zipRoot = options.layout === 'store' ? '' : packageDirName(manifest.version);
   fs.rmSync(stageRoot, { recursive: true, force: true });
   fs.mkdirSync(payloadDir, { recursive: true });
 
@@ -184,7 +229,6 @@ function main() {
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(source, target);
   }
-  fs.writeFileSync(path.join(payloadDir, MARKER_FILE), `${marker}\n`, 'utf8');
 
   const entries = [];
   const walk = (dir, prefix) => {
@@ -194,26 +238,28 @@ function main() {
       else entries.push({ name: relative, data: fs.readFileSync(path.join(dir, entry.name)) });
     }
   };
-  walk(payloadDir, packageDirName(manifest.version));
+  walk(payloadDir, zipRoot);
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 
   fs.mkdirSync(outDir, { recursive: true });
-  const zipFile = path.join(outDir, zipName(manifest.version));
+  const zipFile = path.join(outDir, zipName(manifest.version, options.layout));
   const written = createZipFile({ entries, output: zipFile });
   const sha256 = crypto.createHash('sha256').update(fs.readFileSync(zipFile)).digest('hex');
-  const checksumFile = path.join(outDir, checksumName(manifest.version));
-  fs.writeFileSync(checksumFile, `${sha256}  ${zipName(manifest.version)}\n`, 'utf8');
+  const checksumFile = path.join(outDir, checksumName(manifest.version, options.layout));
+  fs.writeFileSync(checksumFile, `${sha256}  ${zipName(manifest.version, options.layout)}\n`, 'utf8');
 
   const report = {
     version: manifest.version,
     tag: tagOf(manifest.version),
-    directory: packageDirName(manifest.version),
-    zip: zipName(manifest.version),
-    checksumFile: checksumName(manifest.version),
+    layout: options.layout,
+    directory: zipRoot || '.',
+    zip: zipName(manifest.version, options.layout),
+    checksumFile: checksumName(manifest.version, options.layout),
     sha256,
     files: entries.length,
     zipBytes: written.bytes,
     previousVersion: previous,
+    branch: options.branch,
     installDoc,
     warnings
   };

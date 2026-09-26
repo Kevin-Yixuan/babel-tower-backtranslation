@@ -55,10 +55,14 @@ jobs:
       - name: npm run test:browser
         run: npm run test:browser
 
-  update:
-    name: 原地更新保持数据
+  # 原「原地更新保持数据」job（tests/update-reload.cjs）已随未发布的本地自动更新
+  # 机制（update-unpacked.ps1 覆盖、update-marker.json 标记、轮询与强制重载）一并退役：
+  # 该机制从未发布、脚本与标记文件也不在仓库中，保留这条执行路径只会误导。
+  # 若将来重新设计更新机制，应新增独立 job 并重新走审查，而不是恢复这里的跳过逻辑。
+  packaging-windows:
+    name: 打包专项（含 PowerShell 5.1 中文解压验证）
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
     defaults:
       run:
         shell: bash
@@ -67,16 +71,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: 安装 Playwright（Edge 使用镜像自带的浏览器）
-        run: npm install --no-save --no-package-lock playwright@1.63.0
-      - name: tests/update-reload.cjs（原地更新后保持扩展 ID 与本地数据）
-        run: |
-          if [ ! -f tests/update-reload.cjs ]; then
-            echo "::warning::tests/update-reload.cjs 不在本分支（原地更新专项测试仍在开发中），本次跳过。该文件进入 main 后会自动纳入，无需改动本工作流。"
-            {
-              echo "### 原地更新专项测试：未执行"
-              echo "tests/update-reload.cjs 不在本分支，已跳过。合并该文件后本 job 会自动运行它。"
-            } >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          node tests/update-reload.cjs
+      - name: 确认 Windows PowerShell 为 5.1
+        run: powershell.exe -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'
+      - name: node --test tests/packaging.test.mjs
+        run: node --test tests/packaging.test.mjs

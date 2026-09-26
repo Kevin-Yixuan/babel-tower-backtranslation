@@ -3,8 +3,11 @@
 // ROOT_FILES / RUNTIME_DIRS 描述「完整候选提交可以独立构建出可加载扩展」所需的
 // 全部文件：根目录白名单 + 运行期真正会被 import / 引用到的目录（background.js
 // 依赖 services/，内容脚本与后台都依赖 mdx / modules / sidebar）。
-// 已退役的本地自动更新机制（update-unpacked.ps1、update-marker.json）不再随包，
-// 由 DENY_PATTERNS 兜底拒绝，见下方注释。
+// manifest 的 options_page 指向 options.html，options.html 又加载 options.js，
+// 因此这两个文件必须在白名单里，否则包加载后设置页直接报错。
+// 已退役的本地自动更新机制（update-unpacked.ps1、update-marker.json）从未随任何
+// 正式渠道发布，也不再打包：白名单天然排除它们，DENY_PATTERNS 兜底拒绝（尤其
+// 防止它们混进 mdx/modules/services/sidebar 目录），见下方注释。
 
 export const PACKAGE_BASENAME = 'babel-tower-backtranslation';
 
@@ -17,12 +20,17 @@ export const ROOT_FILES = [
   'popup.html',
   'popup.js',
   'popup.css',
+  'options.html',
+  'options.js',
   'shared.js',
   'writing.html',
   'writing.js',
   'writing.css',
   '安装与更新.md'
 ];
+
+// 已退役的更新机制文件名：出现在 ZIP 内一律视为缺陷（verify-package 会据此失败）。
+export const RETIRED_UPDATE_FILES = ['update-unpacked.ps1', 'update-marker.json'];
 
 export const RUNTIME_DIRS = ['mdx', 'modules', 'services', 'sidebar'];
 
@@ -57,12 +65,18 @@ export function packageDirName(version) {
   return `${PACKAGE_BASENAME}-${version}`;
 }
 
-export function zipName(version) {
-  return `${packageDirName(version)}.zip`;
+// 布局：preview（默认）ZIP 第一层是单一扩展目录，用于 GitHub Release 解压安装；
+// store 是 Chrome Web Store 提交候选，文件平铺在 ZIP 根（manifest.json 在第一层）。
+// store 布局的 ZIP / 校验文件名带 -store 后缀，避免与 preview 产物互相覆盖。
+export const LAYOUTS = ['preview', 'store'];
+
+export function zipName(version, layout = 'preview') {
+  const suffix = layout === 'store' ? '-store' : '';
+  return `${packageDirName(version)}${suffix}.zip`;
 }
 
-export function checksumName(version) {
-  return `${zipName(version)}.sha256`;
+export function checksumName(version, layout = 'preview') {
+  return `${zipName(version, layout)}.sha256`;
 }
 
 export function denyReason(relativePath) {

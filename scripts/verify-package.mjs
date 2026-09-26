@@ -1,8 +1,11 @@
-// 校验已构建的发布包：结构、版本一致性、SHA-256。
+// 校验已构建的发布包：结构、版本一致性、SHA-256、布局。
 // 用法：node scripts/verify-package.mjs dist/babel-tower-backtranslation-0.2.3.zip --tag v0.2.3
+//       node scripts/verify-package.mjs dist/babel-tower-backtranslation-0.2.3-store.zip --layout store
 //
-// 校验项与 update-unpacked.ps1 的验收条件一一对应：ZIP 里只有一个 manifest.json、
-// 根目录文件齐全、mdx/modules/sidebar 三个目录在、完成标记与 manifest 同版本且 ready:true。
+// 校验项：ZIP 里恰好一个 manifest.json、根目录文件齐全、mdx/modules/services/sidebar
+// 运行目录在、manifest 引用的文件都在、已退役的更新机制文件（update-unpacked.ps1、
+// update-marker.json）不在包内、SHA-256 与校验文件一致。
+// preview 布局要求第一层只有一个版本目录；store 布局要求 manifest.json 平铺在 ZIP 根。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,26 +14,31 @@ import crypto from 'node:crypto';
 import { assertReleaseVersion, compareVersion, tagOf, versionOfTag } from './version.mjs';
 import { readZipEntries, readZipEntryData } from './zip.mjs';
 import {
-  MARKER_FILE,
+  LAYOUTS,
   ROOT_FILES,
   RUNTIME_DIRS,
+  RETIRED_UPDATE_FILES,
   denyReason,
   manifestReferencedFiles,
   packageDirName
 } from './package-spec.mjs';
 
 function parseArgs(argv) {
-  const options = { zip: null, sha: null, tag: null, expectVersion: null };
+  const options = { zip: null, sha: null, tag: null, expectVersion: null, layout: 'preview' };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = () => argv[++index];
     if (arg === '--sha') options.sha = value();
     else if (arg === '--tag') options.tag = value();
     else if (arg === '--expect-version') options.expectVersion = value();
+    else if (arg === '--layout') options.layout = value();
     else if (arg.startsWith('--')) throw new Error(`未知参数：${arg}`);
     else if (options.zip === null) options.zip = arg;
   }
-  if (!options.zip) throw new Error('用法：node scripts/verify-package.mjs <zip> [--tag v0.2.3]');
+  if (!options.zip) throw new Error('用法：node scripts/verify-package.mjs <zip> [--tag v0.2.3] [--layout preview|store]');
+  if (!LAYOUTS.includes(options.layout)) {
+    throw new Error(`--layout 只接受 ${LAYOUTS.join(' 或 ')}`);
+  }
   return options;
 }
 
@@ -47,20 +55,30 @@ function main() {
   const names = entries.map((entry) => entry.name);
   if (entries.length === 0) fail('ZIP 里没有任何文件');
 
-  // 第一层必须只有一个扩展目录。
+  // preview：第一层必须只有一个扩展目录，manifest.json 在该目录第一层。
+  // store：文件平铺，manifest.json 必须直接位于 ZIP 根。
   const topLevel = new Set(names.map((name) => name.split('/')[0]));
-  if (topLevel.size !== 1) {
-    fail(`ZIP 第一层应有且只有一个扩展目录，实际有：${[...topLevel].join(', ')}`);
+  let root;
+  if (options.layout === 'store') {
+    root = '';
+    if (!names.includes('manifest.json')) {
+      fail('store 布局的 ZIP 根目录缺少 manifest.json（看起来用了 preview 的包装目录布局）');
+    }
+  } else {
+    if (topLevel.size !== 1) {
+      fail(`ZIP 第一层应有且只有一个扩展目录，实际有：${[...topLevel].join(', ')}`);
+    }
+    root = [...topLevel][0];
   }
-  const root = [...topLevel][0];
+  const relativeOf = (name) => (root ? name.slice(root.length + 1) : name);
 
   const manifests = names.filter((name) => name.split('/').pop() === 'manifest.json');
   if (manifests.length !== 1) fail(`ZIP 必须恰好包含一个 manifest.json，实际 ${manifests.length} 个`);
 
-  const manifestName = `${root}/manifest.json`;
+  const manifestName = root ? `${root}/manifest.json` : 'manifest.json';
   const manifestEntry = entries.find((entry) => entry.name === manifestName);
   if (!manifestEntry) {
-    fail(`扩展目录第一层缺少可直接加载的 manifest.json（期望 ${manifestName}）`);
+    fail(`缺少可直接加载的 manifest.json（期望 ${manifestName}）`);
     throw new AggregateError(failures);
   }
 
@@ -83,11 +101,14 @@ function main() {
   if (!/巴别塔/.test(String(manifest.name ?? ''))) fail(`扩展名不包含「巴别塔」：${manifest.name}`);
 
   if (version) {
-    if (root !== packageDirName(version)) {
+    if (options.layout === 'preview' && root !== packageDirName(version)) {
       fail(`ZIP 第一层目录名 ${root} 与版本号不一致，应为 ${packageDirName(version)}`);
     }
-    if (path.basename(zipPath) !== `${packageDirName(version)}.zip`) {
-      fail(`ZIP 文件名 ${path.basename(zipPath)} 与版本号不一致，应为 ${packageDirName(version)}.zip`);
+    const expectedZip = options.layout === 'store'
+      ? `${packageDirName(version)}-store.zip`
+      : `${packageDirName(version)}.zip`;
+    if (path.basename(zipPath) !== expectedZip) {
+      fail(`ZIP 文件名 ${path.basename(zipPath)} 与版本号/布局不一致，应为 ${expectedZip}`);
     }
     if (options.tag && options.tag !== tagOf(version)) {
       fail(`Release tag ${options.tag} 与包内版本 ${version} 不一致，应为 ${tagOf(version)}`);
@@ -106,34 +127,26 @@ function main() {
     }
   }
 
-  // 完成标记必须与 manifest 同版本且 ready:true。
-  const markerEntry = entries.find((entry) => entry.name === `${root}/${MARKER_FILE}`);
-  if (!markerEntry) {
-    fail(`缺少 ${MARKER_FILE}，更新脚本会拒绝该包`);
-  } else {
-    try {
-      const marker = JSON.parse(readEntry(zipPath, markerEntry));
-      if (marker.ready !== true) fail(`${MARKER_FILE} 的 ready 必须为 true`);
-      if (version && compareVersion(String(marker.version ?? ''), version) !== 0) {
-        fail(`${MARKER_FILE} 版本 ${marker.version} 与 manifest 版本 ${version} 不一致`);
-      }
-      notes.push(`${MARKER_FILE}：version ${marker.version}，ready ${marker.ready}`);
-    } catch (error) {
-      fail(`${MARKER_FILE} 无法解析：${error.message}`);
+  // 已退役的本地自动更新机制文件绝不能进包：它们从未随正式渠道发布，
+  // 出现即说明退役不彻底（注意：这是「路径已移除」，不是原机制被修复后继续使用）。
+  for (const retired of RETIRED_UPDATE_FILES) {
+    if (names.some((name) => name === retired || name.endsWith(`/${retired}`))) {
+      fail(`包内不应包含已退役的更新机制文件：${retired}`);
     }
   }
 
-  // 更新脚本要求的根目录文件与运行目录。
+  // 根目录文件与运行目录。
+  const at = (name) => (root ? `${root}/${name}` : name);
   for (const name of ROOT_FILES) {
-    if (!names.includes(`${root}/${name}`)) fail(`缺少根目录文件：${name}`);
+    if (!names.includes(at(name))) fail(`缺少根目录文件：${name}`);
   }
   for (const dir of RUNTIME_DIRS) {
-    if (!names.some((name) => name.startsWith(`${root}/${dir}/`))) fail(`缺少运行目录：${dir}`);
+    if (!names.some((name) => name.startsWith(at(`${dir}/`)))) fail(`缺少运行目录：${dir}`);
   }
 
   // manifest 引用的文件。
   for (const ref of manifestReferencedFiles(manifest)) {
-    if (!names.includes(`${root}/${ref}`)) fail(`manifest 引用的文件不在包内：${ref}`);
+    if (!names.includes(at(ref))) fail(`manifest 引用的文件不在包内：${ref}`);
   }
 
   // 不该出现的东西。
@@ -141,7 +154,7 @@ function main() {
     if (name.startsWith('/') || name.includes('\\') || name.includes('..')) {
       fail(`非法条目路径：${name}`);
     }
-    const relative = name.slice(root.length + 1);
+    const relative = relativeOf(name);
     const reason = denyReason(relative || name);
     if (reason) fail(`包内不应包含 ${name}（${reason}）`);
   }
@@ -168,7 +181,8 @@ function main() {
 
   const report = {
     zip: path.basename(zipPath),
-    root,
+    layout: options.layout,
+    root: root || '.',
     version,
     tag: version ? tagOf(version) : null,
     files: entries.length,
@@ -185,7 +199,7 @@ function main() {
   }
   for (const line of notes) console.log(`OK ${line}`);
   console.log(
-    `包校验通过：${root}／版本 ${version}／${entries.length} 个文件／${report.zipBytes} 字节`
+    `包校验通过：${root || '.'}／${options.layout} 布局／版本 ${version}／${entries.length} 个文件／${report.zipBytes} 字节`
   );
   console.log(JSON.stringify(report, null, 2));
 }

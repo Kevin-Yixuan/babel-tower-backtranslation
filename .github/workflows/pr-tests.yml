@@ -16,5 +16,5 @@ concurrency:
 
 jobs:
   tests:
-    name: 单元测试 / 浏览器测试 / 原地更新测试
+    name: 单元测试 / 浏览器测试 / 打包专项测试
     uses: ./.github/workflows/tests.yml

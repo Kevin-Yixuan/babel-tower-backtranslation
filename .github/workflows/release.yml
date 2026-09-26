@@ -2,6 +2,11 @@ name: Release community preview
 
 # 合并到 main 后自动发布社群预览版：测试全绿 → 构建 ZIP 与 SHA-256 → 校验 → 建 Release。
 # 手动触发时默认 dry_run，只构建不发布，用来验证流水线本身。
+# 分支门禁：push 触发时先核验提交关联到已合并 PR，构建步骤再带 --branch main；
+# 只有通过必需检查并合并的 main 才能产出候选包（publish 另加 ref == main 条件）。
+# 远端仓库层面的分支保护与必需状态检查需在 GitHub 设置中配置（见 docs/store-submission.md）。
+# 同时产出 Chrome Web Store 提交候选（store 布局，仅作为流水线产物，不上传商店）。
+# 远端 tag 查询失败或版本未递增都会阻断构建（见 scripts/build-package.mjs）。
 
 on:
   push:
@@ -30,6 +35,10 @@ jobs:
     needs: tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # pull-requests: read 供下面「提交来自已合并 PR」门禁查询提交与 PR 的关联。
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       version: ${{ steps.meta.outputs.version }}
       tag: ${{ steps.meta.outputs.tag }}
@@ -43,18 +52,38 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: 构建 ZIP 与 SHA-256
+      - name: 门禁：候选提交必须来自已合并的 PR（push 触发时）
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+            --jq '[.[] | select(.merged == true)] | length')
+          if [ "${count:-0}" -lt 1 ]; then
+            echo "::error::提交 ${{ github.sha }} 未关联任何已合并 PR；发布候选只接受通过必需检查并合并进 main 的提交，直接推送不放行。"
+            exit 1
+          fi
+          echo "提交关联到 $count 个已合并 PR"
+      - name: 构建 ZIP 与 SHA-256（preview 布局，分支门禁 main）
         env:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           gate=fail
           if [ "$DRY_RUN" = "true" ]; then gate=warn; fi
-          node scripts/build-package.mjs --out dist --version-gate="$gate"
+          node scripts/build-package.mjs --out dist --version-gate="$gate" --branch main
+      - name: 构建 Chrome Web Store 提交候选（store 布局，仅产物流程，不上传商店）
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          gate=fail
+          if [ "$DRY_RUN" = "true" ]; then gate=warn; fi
+          node scripts/build-package.mjs --out dist/store --layout store --version-gate="$gate" --branch main
       - name: 校验发布包
         run: |
           version=$(node -p "require('./dist/package-report.json').version")
           echo "构建版本 $version"
           node scripts/verify-package.mjs "dist/babel-tower-backtranslation-$version.zip" --tag "v$version"
+          node scripts/verify-package.mjs "dist/store/babel-tower-backtranslation-$version-store.zip" --layout store --tag "v$version"
       - name: 汇总元数据
         id: meta
         run: |
@@ -76,6 +105,9 @@ jobs:
             dist/${{ steps.meta.outputs.zip }}
             dist/${{ steps.meta.outputs.checksum }}
             dist/package-report.json
+            dist/store/*.zip
+            dist/store/*.sha256
+            dist/store/package-report.json
           if-no-files-found: error
       - name: 写入 job 摘要
         run: |
@@ -85,6 +117,7 @@ jobs:
             echo "- ZIP：${{ steps.meta.outputs.zip }}（${{ steps.meta.outputs.files }} 个文件，${{ steps.meta.outputs.bytes }} 字节）"
             echo "- SHA-256：\`${{ steps.meta.outputs.sha256 }}\`"
             echo "- 校验文件：${{ steps.meta.outputs.checksum }}"
+            echo "- Chrome Web Store 提交候选：\`dist/store/babel-tower-backtranslation-${{ steps.meta.outputs.version }}-store.zip\`（仅产物，未上传商店）"
             echo "- dry_run：${{ inputs.dry_run || 'false (push to main)' }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -93,6 +126,7 @@ jobs:
     needs: build
     if: >-
       github.repository == 'Kevin-Yixuan/babel-tower-backtranslation' &&
+      github.ref == 'refs/heads/main' &&
       (github.event_name != 'workflow_dispatch' || inputs.dry_run != true)
     runs-on: ubuntu-latest
     timeout-minutes: 15
