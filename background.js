@@ -1,3 +1,5 @@
+import { normalizeSettings, validateProviders, modelFetch } from './services/settings.js';
+import { sessionOp } from './services/sessions.js';
 import {
   DEFAULT_SETTINGS, PROVIDERS, PROVIDER_IDS, matchingRule, normalizeWord, responseText,
   assertTextLimit, normalizeBaseUrl, joinUrl, buildChatRequest, chatText, extractJson,
@@ -23,9 +25,7 @@ const TRANSLATION_URL = 'https://api.mymemory.translated.net/get';
 const MAX_CARDS = 300;
 const JEV_RETRY_DELAY_MS = 800;
 let jevQueue = Promise.resolve();
-
-chrome.runtime.onInstalled.addListener(() => lockStorage());
-chrome.runtime.onStartup.addListener(() => lockStorage());
+chrome.runtime.onInstalled.addListener(lockStorage);
 lockStorage();
 
 // 内容脚本收不到 storage.onChanged（MV3 实测），由后台收到设置变化后广播到已打开的 X 页面，
@@ -65,6 +65,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
 
 async function handle(message, sender) {
   switch (message.action) {
+    case 'OPEN_SETTINGS': await chrome.runtime.openOptionsPage(); return { opened: true };
+    case 'SESSION': {
+      if (['list', 'remove', 'import'].includes(message.payload?.op) && !isExtensionPage(sender)) throw fail('请在设置页管理会话。');
+      return sessionOp(message.payload);
+    }
     case 'PUBLIC_SETTINGS': return publicSettings();
     case 'PRIVATE_SETTINGS':
       if (!isExtensionPage(sender)) throw fail('设置只能在插件弹窗中读取。');
@@ -127,18 +132,7 @@ async function storeOp(payload) {
 
 async function loadSettings() {
   const { settings: stored } = await STORAGE.get('settings');
-  const settings = { ...DEFAULT_SETTINGS, ...(stored || {}) };
-  settings.providers = { ...DEFAULT_SETTINGS.providers, ...((stored || {}).providers || {}) };
-  if (stored?.model && !stored.providers?.openai?.model) settings.providers.openai = { ...settings.providers.openai, model: stored.model };
-  if (!PROVIDER_IDS.includes(settings.modelProvider)) settings.modelProvider = 'openai';
-  for (const id of PROVIDER_IDS) {
-    const def = PROVIDERS[id];
-    const cfg = settings.providers[id] || {};
-    // 空 Base URL 视为「未设置」回退到官方默认（旧版 MiMo 默认就是空串）
-    settings.providers[id] = { baseUrl: typeof cfg.baseUrl === 'string' && cfg.baseUrl.trim() ? cfg.baseUrl : def.baseUrl, model: typeof cfg.model === 'string' && cfg.model ? cfg.model : def.model };
-  }
-  // 旧默认 deepseek-chat 已于 2026-07-24 停用，迁移为当前默认；其余用户手填的模型名不代改。
-  if (settings.providers.deepseek.model === 'deepseek-chat') settings.providers.deepseek.model = PROVIDERS.deepseek.model;
+  const settings = normalizeSettings(stored || {});
   return settings;
 }
 
@@ -150,8 +144,8 @@ async function loadApiKeys() {
 }
 
 function providerConfig(settings, id = settings.modelProvider) {
-  const providerId = PROVIDER_IDS.includes(id) ? id : 'openai';
-  const def = PROVIDERS[providerId];
+  const providerId = Object.hasOwn(settings.providers, id) ? id : settings.modelProvider;
+  const def = settings.providers[providerId];
   const cfg = settings.providers?.[providerId] || {};
   return { id: providerId, label: def.label, kind: def.kind, baseUrl: cfg.baseUrl ?? def.baseUrl, model: cfg.model ?? def.model };
 }
@@ -183,7 +177,10 @@ async function saveSettings(payload) {
   if (!payload || typeof payload !== 'object') throw fail('设置格式有误。');
   const previous = await loadSettings();
   const settings = {
-    modelProvider: PROVIDER_IDS.includes(payload.modelProvider) ? payload.modelProvider : previous.modelProvider,
+    schemaVersion: 2,
+    autoTranslate: payload.autoTranslate ?? previous.autoTranslate,
+    hoverLookup: payload.hoverLookup ?? previous.hoverLookup,
+    modelProvider: payload.modelProvider || previous.modelProvider,
     providers: {},
     targetLanguage: clean(payload.targetLanguage || '英语', 30),
     filterEnabled: Boolean(payload.filterEnabled),
@@ -191,23 +188,18 @@ async function saveSettings(payload) {
     filterThreshold: Math.max(0.65, Math.min(0.98, Number(payload.filterThreshold) || DEFAULT_SETTINGS.filterThreshold)),
     filterDailyLimit: Math.max(10, Math.min(200, Number(payload.filterDailyLimit) || 80))
   };
-  for (const id of PROVIDER_IDS) {
-    const def = PROVIDERS[id];
-    const src = payload.providers?.[id] || previous.providers[id] || {};
-    let baseUrl = typeof src.baseUrl === 'string' ? src.baseUrl.trim() : (def.baseUrl || '');
-    if (baseUrl) baseUrl = normalizeBaseUrl(baseUrl); // throws explicit chinese error
-    const model = /^[a-zA-Z0-9._:-]{1,80}$/.test(src.model || '') ? src.model : (previous.providers[id]?.model || def.model);
-    settings.providers[id] = { baseUrl, model };
-  }
-  settings.model = settings.providers.openai.model; // legacy mirror
+  settings.providers = validateProviders(payload.providers || previous.providers);
+  if (!Object.hasOwn(settings.providers, settings.modelProvider)) throw fail('当前模型配置不存在。');
+  settings.model = settings.providers.openai?.model || previous.model;
   const apiKeys = await loadApiKeys();
-  for (const id of PROVIDER_IDS) {
+  for (const id of Object.keys(settings.providers)) {
     // undefined = caller didn't send this slot (keep stored); empty string = explicit clear
     const incoming = payload.apiKeys?.[id];
     const key = incoming === undefined ? (apiKeys[id] || '') : clean(incoming, 250);
     if (key) apiKeys[id] = key; else delete apiKeys[id];
   }
-  const jevKey = clean(payload.jevKey, 250);
+  for (const id of Object.keys(apiKeys)) if (!Object.hasOwn(settings.providers, id)) delete apiKeys[id];
+  const jevKey = payload.jevKey === undefined ? (await STORAGE.get('jevKey')).jevKey || '' : clean(payload.jevKey, 250);
   await STORAGE.set({ settings, apiKeys, jevKey });
   await STORAGE.remove('openaiKey'); // migrated into apiKeys
   return publicSettings();
@@ -243,6 +235,7 @@ async function callModel({ instructions, input, schema = null, maxOutputTokens =
   let baseUrl;
   try { baseUrl = normalizeBaseUrl(cfg.baseUrl); } catch (error) { error.message = `${error.message}（${cfg.label}）`; throw error; }
   if (!cfg.model) throw fail(`请在设置中填写 ${cfg.label} 模型名。`, 'no_model');
+  if (chrome.permissions?.contains && !await chrome.permissions.contains({ origins: [new URL(baseUrl).origin + '/*'] })) throw fail('尚未授权此 API 地址，请打开设置并点击保存或测试连接。', 'permission');
   const commonHeaders = { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' };
 
   if (cfg.kind === 'responses') {
@@ -257,7 +250,7 @@ async function callModel({ instructions, input, schema = null, maxOutputTokens =
     if (schema) body.text = { format: { type: 'json_schema', name: schemaName, strict: true, schema } };
     let response;
     try {
-      response = await fetch(joinUrl(baseUrl, 'responses'), { method: 'POST', headers: commonHeaders, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+      response = await modelFetch(joinUrl(baseUrl, 'responses'), { method: 'POST', headers: commonHeaders, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
     } catch (error) { throw fetchFailure(error, cfg); }
     if (!response.ok) throw await readHttpError(response, cfg);
     const data = await parseJsonResponse(response, cfg);
@@ -276,7 +269,7 @@ async function callModel({ instructions, input, schema = null, maxOutputTokens =
   body.model = cfg.model;
   let response;
   try {
-    response = await fetch(joinUrl(baseUrl, 'chat/completions'), { method: 'POST', headers: commonHeaders, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+    response = await modelFetch(joinUrl(baseUrl, 'chat/completions'), { method: 'POST', headers: commonHeaders, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
   } catch (error) { throw fetchFailure(error, cfg); }
   if (!response.ok) throw await readHttpError(response, cfg);
   const data = await parseJsonResponse(response, cfg);
@@ -293,15 +286,15 @@ async function callModel({ instructions, input, schema = null, maxOutputTokens =
 
 async function testModel(payload = {}) {
   const settings = await loadSettings();
-  const providerId = PROVIDER_IDS.includes(payload.provider) ? payload.provider : settings.modelProvider;
+  const providerId = payload.provider || settings.modelProvider;
   const stored = providerConfig(settings, providerId);
-  const cfg = { ...stored, baseUrl: typeof payload.baseUrl === 'string' && payload.baseUrl.trim() ? payload.baseUrl.trim() : stored.baseUrl, model: typeof payload.model === 'string' && payload.model.trim() ? payload.model.trim() : stored.model };
+  const cfg = { ...stored, id: providerId, kind: payload.kind || stored.kind, label: payload.label || stored.label, baseUrl: typeof payload.baseUrl === 'string' && payload.baseUrl.trim() ? payload.baseUrl.trim() : stored.baseUrl, model: typeof payload.model === 'string' && payload.model.trim() ? payload.model.trim() : stored.model };
   const keys = await loadApiKeys();
-  const key = typeof payload.key === 'string' && payload.key.trim() ? payload.key.trim() : (keys[cfg.id] || '');
+  const key = typeof payload.key === 'string' ? payload.key.trim() : (keys[cfg.id] || '');
   if (!key) throw fail(`请先填写 ${cfg.label} API Key。`, 'no_key');
   const started = Date.now();
   // 真实走所选模型发一次请求，并核对探测应答——任意非空文字不算连接成功。
-  const result = await callModel({ instructions: 'You are a connectivity probe. Reply with the single word pong.', input: 'ping', maxOutputTokens: 16, providerOverride: cfg, keyOverride: key });
+  const result = await callModel({ instructions: 'You are a connectivity probe. Reply with the single word pong.', input: 'ping', maxOutputTokens: 128, providerOverride: cfg, keyOverride: key });
   const latencyMs = Date.now() - started;
   const answer = String(result?.text || '').trim();
   if (!/\bpong\b/i.test(answer)) {

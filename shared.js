@@ -55,6 +55,7 @@ export function normalizeBaseUrl(raw) {
     error.code = 'bad_url';
     throw error;
   }
+  if (url.username || url.password || url.search || url.hash) throw new Error('API 地址不能包含账号、密码、查询参数或片段。');
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
   if (url.protocol !== 'https:' && !(local && url.protocol === 'http:')) {
     const error = new Error('Base URL 必须使用 https://（本地调试可用 http://localhost）。');

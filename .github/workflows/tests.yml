@@ -1,0 +1,82 @@
+name: Tests
+
+# 被 PR 流水线与发布流水线共用的测试集合。
+# 只读代码、不使用任何密钥，因此 fork 的 PR 也可以安全执行。
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Node 单测
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: npm test
+        run: npm test
+      - name: 发布流水线自测
+        run: node --test tests/packaging.test.mjs
+
+  browser:
+    name: 隔离浏览器测试
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 安装 Playwright（Edge 使用镜像自带的浏览器）
+        run: npm install --no-save --no-package-lock playwright@1.63.0
+      - name: 确认 Edge 可用
+        run: |
+          edge=""
+          for candidate in \
+            "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+            "/c/Program Files/Microsoft/Edge/Application/msedge.exe"; do
+            if [ -f "$candidate" ]; then edge="$candidate"; fi
+          done
+          if [ -z "$edge" ]; then
+            echo "::error::运行器上没有找到 Edge，无法执行浏览器测试"
+            exit 1
+          fi
+          echo "Edge: $edge"
+      - name: npm run test:browser
+        run: npm run test:browser
+
+  update:
+    name: 原地更新保持数据
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 安装 Playwright（Edge 使用镜像自带的浏览器）
+        run: npm install --no-save --no-package-lock playwright@1.63.0
+      - name: tests/update-reload.cjs（原地更新后保持扩展 ID 与本地数据）
+        run: |
+          if [ ! -f tests/update-reload.cjs ]; then
+            echo "::warning::tests/update-reload.cjs 不在本分支（原地更新专项测试仍在开发中），本次跳过。该文件进入 main 后会自动纳入，无需改动本工作流。"
+            {
+              echo "### 原地更新专项测试：未执行"
+              echo "tests/update-reload.cjs 不在本分支，已跳过。合并该文件后本 job 会自动运行它。"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node tests/update-reload.cjs

@@ -95,6 +95,10 @@
   // MV3 内容脚本收不到 chrome.storage.onChanged（实测 Edge 153 从未触发），
   // 设置变化由 background.js 收到 storage 事件后广播 BX_SETTINGS_CHANGED 过来。
   chrome.runtime.onMessage.addListener((message, _sender, respond) => {
+    if (message?.action === 'BX_UPDATE_PING') {
+      respond({ ok: true });
+      return false;
+    }
     if (message?.action === 'BX_SETTINGS_CHANGED') {
       window.BX.send('PUBLIC_SETTINGS').then(applySettings).catch(() => {});
       respond({ ok: true });
