@@ -1,4 +1,5 @@
-import { DEFAULT_SETTINGS, PROVIDERS, PROVIDER_IDS, parseGlossary, normalizeBaseUrl, permissionOrigin } from './shared.js';
+import { DEFAULT_SETTINGS, PROVIDERS, parseGlossary, normalizeBaseUrl, permissionOrigin } from './shared.js';
+import { flashModelSuggestion } from './services/settings.js';
 import { mountDictionaryPanel } from './mdx/dictionary-panel.js';
 
 const $ = selector => document.querySelector(selector);
@@ -13,8 +14,7 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&a
 let rules = [];
 // provider drafts hold form state per provider so switching tabs never loses input
 const providerDrafts = {};
-let loadedSettings;
-let initialData;
+let loadedSettings; // 最近一次「生效」的设置；未保存的表单改动不写入这里
 
 function status(message, error = false) {
   $('#status').textContent = message;
@@ -73,6 +73,17 @@ function showProvider(id) {
 
 $('#model-provider').onchange = () => { stashActiveProvider(); showProvider(activeProvider()); };
 
+// 表单为空时按占位符回落到内置默认地址，权限申请与实际请求始终针对同一个 origin
+function effectiveBaseUrl(id, draft) {
+  return (draft && draft.baseUrl) || PROVIDERS[id]?.baseUrl || '';
+}
+
+// Flash／低延迟模型：仅展示建议，从不写入任何配置
+function renderModelHint() {
+  const hint = flashModelSuggestion(loadedSettings);
+  $('#model-hint').textContent = hint ? `推荐尝试：${hint.model}（${hint.note}）· ${hint.reason}` : '当前已是推荐的低延迟模型。';
+}
+
 async function ensureOrigin(baseUrl) {
   const origin = permissionOrigin(baseUrl); // throws explicit error on bad url
   if (await chrome.permissions.contains({ origins: [origin] })) return;
@@ -90,9 +101,10 @@ $('#test-model').onclick = async () => {
   result.textContent = '测试中……';
   result.classList.remove('error', 'ok');
   try {
-    ensureOriginSyncCheck(draft.baseUrl);
-    await ensureOrigin(draft.baseUrl);
-    const data = await send('TEST_MODEL', { payload: { provider: id, label: draft.label, kind: draft.kind, baseUrl: draft.baseUrl, model: draft.model, key: draft.key } });
+    const baseUrl = effectiveBaseUrl(id, draft);
+    ensureOriginSyncCheck(baseUrl);
+    await ensureOrigin(baseUrl);
+    const data = await send('TEST_MODEL', { payload: { provider: id, label: draft.label, kind: draft.kind, baseUrl, model: draft.model, key: draft.key } });
     result.textContent = data.message;
     result.classList.add('ok');
   } catch (error) {
@@ -105,7 +117,7 @@ $('#test-model').onclick = async () => {
 
 function ensureOriginSyncCheck(baseUrl) {
   // surface empty/malformed url before requesting permissions
-  normalizeBaseUrl(baseUrl || PROVIDERS[activeProvider()]?.baseUrl);
+  normalizeBaseUrl(baseUrl);
 }
 
 // ---------- Jev diagnostics ----------
@@ -162,7 +174,16 @@ async function saveSettings() {
     if (payload.filterEnabled && (!payload.jevKey || !payload.filterRules.some(rule => rule.enabled && rule.text.trim()))) throw new Error('开启筛选前，请填写 Jev Key 并启用至少一条规则。');
     const active = payload.providers[payload.modelProvider];
     if (active?.baseUrl) await ensureOrigin(active.baseUrl);
-    await send('SAVE_SETTINGS', { payload }); $('#active-config').textContent = '当前使用：' + payload.providers[payload.modelProvider].label; status('已保存。已打开的 X 页面会立即应用新的筛选与写作设置。');
+    const saved = await send('SAVE_SETTINGS', { payload });
+    // 保存成功后才把草稿提升为「生效配置」；下拉里的名称同步为新 label
+    loadedSettings = saved || { ...loadedSettings, ...payload };
+    $('#active-config').textContent = '当前使用：' + payload.providers[payload.modelProvider].label;
+    for (const option of $('#model-provider').options) {
+      const draft = providerDrafts[option.value];
+      if (draft?.label) option.text = draft.label;
+    }
+    renderModelHint();
+    status('已保存。已打开的 X 页面会立即应用新的筛选与写作设置。');
     refreshJevDiagnostics();
   } catch (error) { status(error.message, true); }
 }
@@ -202,7 +223,7 @@ document.querySelector('#open-mdx-import').onclick = () => {
 try {
   const data = await send('PRIVATE_SETTINGS');
   const settings = data.settings || DEFAULT_SETTINGS;
-  loadedSettings = settings; initialData = data;
+  loadedSettings = settings;
   for (const id of Object.keys(settings.providers)) providerDrafts[id] = {};
   $('#model-provider').innerHTML = Object.entries(settings.providers).map(([id,cfg]) => '<option value="' + esc(id) + '">' + esc(cfg.label || PROVIDERS[id]?.label || id) + '</option>').join('');
   $('#auto-translate').checked = settings.autoTranslate !== false;
@@ -219,6 +240,7 @@ try {
   }
   $('#model-provider').value = settings.modelProvider;
   showProvider(activeProvider());
+  renderModelHint();
   $('#jev-key').value = data.jevKey || '';
   $('#filter-enabled').checked = Boolean(settings.filterEnabled);
   $('#filter-threshold').value = Math.round((settings.filterThreshold ?? DEFAULT_SETTINGS.filterThreshold) * 100);

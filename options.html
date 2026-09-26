@@ -6,6 +6,8 @@
   <title>巴别塔（回译）</title>
   <link rel="stylesheet" href="popup.css">
   <link rel="stylesheet" href="mdx/dictionary-panel.css">
+  <!-- popup.css 的 body 规则是给 372×610 弹窗写的；固定设置页必须解除这些上限 -->
+  <style>body.options-page{width:auto;min-height:0;max-height:none;overflow:visible}</style>
   <script type="module" src="options.js"></script>
 </head>
 <body class="options-page">
@@ -18,7 +20,7 @@
       <div class="field"><label for="target-language">回复写作默认语言</label><select id="target-language"><option>英语</option><option>西班牙语</option><option>日语</option><option>法语</option><option>德语</option><option>葡萄牙语</option><option>韩语</option><option>阿拉伯语</option></select><small>阅读页的译文语言单独设置，英文原文默认译成中文。</small></div>
       <p id="active-config" role="status"></p><p class="privacy">交互翻译优先选择 Flash／低延迟模型。较慢的推理模型可能明显增加等待时间；模型由你选择。</p><div class="field"><label for="model-provider">模型服务商</label><select id="model-provider"><option value="openai">OpenAI</option><option value="deepseek">DeepSeek</option><option value="mimo">MiMo V2.6 Flash</option><option value="glm">GLM</option></select></div>
       <div class="test-row"><button id="add-provider">添加自定义 API</button><button id="delete-provider">删除此配置</button></div><div class="field"><label for="provider-label">配置名称</label><input id="provider-label" maxlength="80"></div><div class="field"><label for="provider-kind">接口协议</label><select id="provider-kind"><option value="chat">Chat Completions</option><option value="responses">Responses</option></select></div><div class="field"><label for="provider-base-url">Base URL</label><input id="provider-base-url" spellcheck="false" placeholder="https://api.deepseek.com/v1"><small>OpenAI 兼容地址；以 https:// 开头</small></div>
-      <div class="field"><label for="provider-model">模型名</label><input id="provider-model" spellcheck="false" placeholder="deepseek-flash"><small>填写服务商提供的准确模型名，支持 /；不会自动替换你的选择。</small></div>
+      <div class="field"><label for="provider-model">模型名</label><input id="provider-model" spellcheck="false" placeholder="deepseek-flash"><small>填写服务商提供的准确模型名，支持 /；不会自动替换你的选择。</small><small id="model-hint" class="hint" role="status"></small></div>
       <div class="field"><label for="provider-key">API Key <small>用于翻译、语法讲解和表达检查</small></label><input id="provider-key" type="password" autocomplete="off" placeholder="在服务商控制台获取"></div>
       <div class="test-row"><button type="button" id="test-model" class="secondary">测试连接</button><span id="test-result" role="status"></span></div>
       <div class="privacy">自动模式下，进入帖子或文章详情时，正文会发往所选模型；手动模式下点击翻译才发送，可能消耗你的模型额度；点击生成、检查或讲解时也会发送相应上下文与输入。OpenAI 请求设为 store: false；其他服务商的留存规则以其说明为准。密钥仅保存在此浏览器的扩展本地存储，不会同步或写入 X。</div>

@@ -80,13 +80,13 @@ async function handle(message, sender) {
     }
     case 'PUBLIC_SETTINGS': return publicSettings();
     case 'PRIVATE_SETTINGS':
-      if (!isExtensionPage(sender)) throw fail('设置只能在插件弹窗中读取。');
+      if (!isExtensionPage(sender)) throw fail('设置只能在设置页中读取。');
       return privateSettings();
     case 'SAVE_SETTINGS':
-      if (!isExtensionPage(sender)) throw fail('设置只能在插件弹窗中修改。');
+      if (!isExtensionPage(sender)) throw fail('设置只能在设置页中修改。');
       return saveSettings(message.payload);
     case 'TEST_MODEL':
-      if (!isExtensionPage(sender)) throw fail('连接测试只能在插件弹窗中使用。');
+      if (!isExtensionPage(sender)) throw fail('连接测试只能在设置页中使用。');
       return testModel(message.payload);
     case 'JEV_STATUS':
       // 放宽为 X 页面与插件页都可读（发现模块的诊断 UI 需要；只读状态，不含密钥明文）。
@@ -108,10 +108,10 @@ async function handle(message, sender) {
     case 'SAVE_CARD': return saveCard(message.payload);
     case 'LIST_CARDS': return (await STORAGE.get('cards')).cards || [];
     case 'DELETE_CARD':
-      if (!isExtensionPage(sender)) throw fail('请在插件弹窗中管理收藏。');
+      if (!isExtensionPage(sender)) throw fail('请在设置页中管理收藏。');
       return deleteCard(message.id);
     case 'IMPORT_GLOSSARY':
-      if (!isExtensionPage(sender)) throw fail('请在插件弹窗中导入词表。');
+      if (!isExtensionPage(sender)) throw fail('请在设置页中导入词表。');
       return importGlossary(message.entries);
     default: throw fail('未知操作。');
   }
