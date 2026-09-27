@@ -55,6 +55,9 @@ const path = require('node:path');
   // 需要先在设置里写入测试密钥（占位符，非真实密钥），runAI 才会放行。
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/options.html`);
+  // 等设置页初始化完成：#model-provider 的选项由 PRIVATE_SETTINGS 回包填充；
+  // 未就绪时点保存会拿到空 providers，回显配置名时抛错，「已保存」永不出现（发布流水线两次 CI 都输给了这个竞态）
+  await popup.waitForFunction(() => document.querySelector('#model-provider')?.options.length > 0, null, { timeout: 15000 });
   await popup.locator('#provider-key').fill('test-placeholder-key');
   await popup.locator('#save-main').click();
   await popup.locator('#status').getByText('已保存').waitFor({ timeout: 8000 });

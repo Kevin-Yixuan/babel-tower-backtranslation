@@ -55,6 +55,8 @@ const path = require('node:path');
   const popup = await context.newPage();
   await popup.setViewportSize({ width: 372, height: 620 });
   await popup.goto(`chrome-extension://${extensionId}/options.html`);
+  // 等设置页初始化完成（PRIVATE_SETTINGS 回包填充 #model-provider），否则提前保存会拿到空 providers
+  await popup.waitForFunction(() => document.querySelector('#model-provider')?.options.length > 0, null, { timeout: 15000 });
   await popup.locator('#provider-key').waitFor();
   assert(!(await popup.locator('#status').innerText()).includes('此操作只允许'));
   await popup.screenshot({ path: path.join(root, 'tests', 'popup-preview.png') });
