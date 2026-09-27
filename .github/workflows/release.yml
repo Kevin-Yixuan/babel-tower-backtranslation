@@ -78,14 +78,14 @@ jobs:
         run: |
           gate=fail
           if [ "$DRY_RUN" = "true" ]; then gate=warn; fi
-          node scripts/build-package.mjs --out dist --version-gate="$gate" --branch main
+          node scripts/build-package.mjs --out dist --version-gate "$gate" --branch main
       - name: 构建 Chrome Web Store 提交候选（store 布局，仅产物流程，不上传商店）
         env:
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           gate=fail
           if [ "$DRY_RUN" = "true" ]; then gate=warn; fi
-          node scripts/build-package.mjs --out dist/store --layout store --version-gate="$gate" --branch main
+          node scripts/build-package.mjs --out dist/store --layout store --version-gate "$gate" --branch main
       - name: 校验发布包
         run: |
           version=$(node -p "require('./dist/package-report.json').version")
