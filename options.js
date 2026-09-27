@@ -1,3 +1,4 @@
+import { safeAgentEndpoint } from './services/agent-data.js';
 import { DEFAULT_SETTINGS, PROVIDERS, parseGlossary, normalizeBaseUrl, permissionOrigin } from './shared.js';
 import { flashModelSuggestion } from './services/settings.js';
 import { mountDictionaryPanel } from './mdx/dictionary-panel.js';
@@ -44,7 +45,7 @@ document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () =>
 
 // 表单编辑统一走这里：既标记未保存，也让在途连接测试作废。
 for (const selector of ['#provider-label', '#provider-kind', '#provider-base-url', '#provider-model', '#provider-key',
-  '#model-provider', '#target-language', '#auto-translate', '#hover-lookup', '#jev-key',
+  '#agent-provider', '#agent-base-url', '#agent-model', '#agent-key', '#model-provider', '#target-language', '#auto-translate', '#hover-lookup', '#jev-key',
   '#filter-enabled', '#filter-threshold', '#filter-limit']) {
   const node = document.querySelector(selector);
   if (!node) continue;
@@ -191,6 +192,9 @@ async function settingsPayload() {
     apiKeys[id] = draft.key || ''; // always send all slots so clearing a field actually deletes the stored key
   }
   return {
+    agentProvider: $('#agent-provider').value,
+    agentBaseUrl: safeAgentEndpoint($('#agent-provider').value, $('#agent-base-url').value),
+    agentModel: $('#agent-model').value, agentKey: $('#agent-key').value,
     modelProvider: activeProvider(),
     autoTranslate: $('#auto-translate').checked, hoverLookup: $('#hover-lookup').checked,
     providers,
@@ -271,6 +275,11 @@ try {
   $('#hover-lookup').checked = settings.hoverLookup !== false;
   $('#active-config').textContent = '当前使用：' + (settings.providers[settings.modelProvider]?.label || settings.modelProvider);
   $('#target-language').value = settings.targetLanguage || '英语';
+  $('#agent-provider').value = settings.agentProvider || DEFAULT_SETTINGS.agentProvider;
+  $('#agent-base-url').value = settings.agentBaseUrl || DEFAULT_SETTINGS.agentBaseUrl;
+  $('#agent-model').value = settings.agentModel || DEFAULT_SETTINGS.agentModel;
+  $('#agent-key').value = data.agentKey || '';
+  $('#agent-model').disabled = settings.agentProvider === 'opencode';
   for (const id of Object.keys(providerDrafts)) {
     providerDrafts[id] = {
       label: settings.providers[id].label, kind: settings.providers[id].kind,
@@ -430,3 +439,18 @@ sessionSearch.addEventListener('input', () => {
 });
 $('#refresh-sessions').onclick = listSessions;
 listSessions();
+
+$('#agent-provider').onchange = () => {
+  $('#agent-base-url').value = $('#agent-provider').value === 'opencode' ? 'http://127.0.0.1:4096' : 'http://127.0.0.1:11434';
+  $('#agent-model').disabled = $('#agent-provider').value === 'opencode';
+};
+$('#test-agent').onclick = async () => {
+  const version = formVersion;
+  try {
+    if (dirty) throw new Error('请先保存修改，再授权并检测。');
+    $('#agent-connection').textContent = '请完成浏览器授权，正在检测…';
+    await ensureOrigin(safeAgentEndpoint(loadedSettings.agentProvider, loadedSettings.agentBaseUrl));
+    const result = await send('AGENT_STATUS');
+    $('#agent-connection').textContent = version === formVersion ? result.label + ' · ' + result.detail : '配置已改变，已忽略旧检测结果。';
+  } catch (error) { $('#agent-connection').textContent = error.message; }
+};

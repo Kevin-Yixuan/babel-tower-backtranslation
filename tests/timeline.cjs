@@ -249,14 +249,15 @@ const say = line => { log.push(line); console.log(line); };
   assert.equal(await popup.locator('#provider-key').inputValue(), 'sk-nonpong');
   say('PASS 服务商切换保留各自 Base URL/模型名/密钥草稿');
 
-  // mimo now has the official default baseUrl; a cleared field must still give an explicit error
+  // Built-in empty addresses use the displayed official fallback; malformed addresses fail before a request.
   await popup.locator('#model-provider').selectOption('mimo');
   assert.equal(await popup.locator('#provider-base-url').inputValue(), 'https://api.xiaomimimo.com/v1', 'MiMo 默认地址应为官方 /v1');
-  await popup.locator('#provider-base-url').fill('');
+  await popup.locator('#provider-base-url').fill('invalid-url');
   await popup.locator('#test-model').click();
   await popup.locator('#test-result.error').waitFor({ timeout: 10000 });
   assert.match(await popup.locator('#test-result').innerText(), /Base URL/);
-  say('PASS MiMo 默认地址为官方 /v1；清空 Base URL 给出明确错误提示');
+  say('PASS MiMo 默认地址为官方 /v1；无效 Base URL 给出明确错误提示');
+  await popup.locator('#provider-base-url').fill('https://api.xiaomimimo.com/v1');
 
   // save deepseek as active provider and verify persistence
   await popup.locator('#model-provider').selectOption('deepseek');

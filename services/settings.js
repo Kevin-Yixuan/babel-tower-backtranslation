@@ -1,3 +1,4 @@
+import { safeAgentEndpoint } from './agent-data.js';
 import { DEFAULT_SETTINGS, PROVIDERS, normalizeBaseUrl } from '../shared.js';
 
 const safeId = id => /^[a-z][a-z0-9_-]{0,79}$/.test(id) && !['constructor', 'prototype', '__proto__'].includes(id);
@@ -41,7 +42,7 @@ export function normalizeSettings(stored = {}) {
     modelProvider: Object.hasOwn(providers, source.modelProvider) ? source.modelProvider : 'openai',
     autoTranslate: source.autoTranslate !== false, hoverLookup: source.hoverLookup !== false };
   // 密钥永远不放进 settings 对象：即使旧数据/归档把密钥混进了 settings，导出与展示也不携带
-  for (const secret of ['apiKeys', 'apiKey', 'openaiKey', 'jevKey', 'key']) delete result[secret];
+  for (const secret of ['apiKeys', 'apiKey', 'openaiKey', 'jevKey', 'agentKey', 'key']) delete result[secret];
   return result;
 }
 
@@ -96,6 +97,9 @@ export async function saveSettings(payload, storage) {
   const previous = await readSettings(storage);
   const settings = {
     schemaVersion: 2,
+    agentProvider: payload.agentProvider ?? previous.agentProvider,
+    agentBaseUrl: safeAgentEndpoint(payload.agentProvider ?? previous.agentProvider, payload.agentBaseUrl ?? previous.agentBaseUrl),
+    agentModel: clean(payload.agentModel ?? previous.agentModel, 120) || DEFAULT_SETTINGS.agentModel,
     autoTranslate: payload.autoTranslate ?? previous.autoTranslate,
     hoverLookup: payload.hoverLookup ?? previous.hoverLookup,
     modelProvider: payload.modelProvider || previous.modelProvider,
@@ -118,7 +122,8 @@ export async function saveSettings(payload, storage) {
   }
   for (const id of Object.keys(apiKeys)) if (!Object.hasOwn(settings.providers, id)) delete apiKeys[id];
   const jevKey = payload.jevKey === undefined ? (await storage.get('jevKey')).jevKey || '' : clean(payload.jevKey, 250);
-  await storage.set({ settings, apiKeys, jevKey });
+  const agentKey = payload.agentKey === undefined ? (await storage.get('agentKey')).agentKey || '' : clean(payload.agentKey, 500);
+  await storage.set({ settings, apiKeys, jevKey, agentKey });
   await storage.remove('openaiKey'); // 已并入 apiKeys
   return publicSettings(storage);
 }

@@ -1,3 +1,4 @@
+import { agentOp } from './services/agent.js';
 import { exportBackup, importBackup, previewBackup } from './services/backup.js';
 import {
   modelFetch, readSettings, readApiKeys,
@@ -76,6 +77,13 @@ async function handle(message, sender) {
       if (message.payload?.op === 'import') return importBackup(message.payload.archive);
       throw fail('未知备份操作。');
     }
+    case 'AGENT_STATUS': case 'AGENT_CHAT': case 'RESET_AGENT_SESSION':
+    case 'LIST_AGENT_SESSIONS': case 'LIST_DOCUMENTS': case 'GET_DOCUMENT': case 'SAVE_DOCUMENT': case 'DELETE_DOCUMENT':
+      if (['DELETE_DOCUMENT', 'LIST_DOCUMENTS', 'GET_DOCUMENT'].includes(message.action) && !isExtensionPage(sender)) throw fail('请在写作台管理文稿。');
+      return agentOp(message);
+    case 'OPEN_WRITE_DESK':
+      await chrome.tabs.create({ url: chrome.runtime.getURL('write/desk.html') + (message.id ? '?doc=' + encodeURIComponent(message.id) : '') });
+      return { opened: true };
     case 'OPEN_SETTINGS': await chrome.runtime.openOptionsPage(); return { opened: true };
     case 'SESSION': {
       if (['list', 'remove', 'import'].includes(message.payload?.op) && !isExtensionPage(sender)) throw fail('请在设置页管理会话。');
@@ -159,6 +167,7 @@ async function privateSettings() {
     settings,
     apiKeys,
     openaiKey: apiKeys.openai || '',
+    agentKey: (await STORAGE.get('agentKey')).agentKey || '',
     jevKey: jevKeyStored.jevKey || '',
     glossaryCount: Object.keys(glossaryStored.glossary || {}).length
   };

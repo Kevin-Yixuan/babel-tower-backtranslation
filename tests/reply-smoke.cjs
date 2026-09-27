@@ -294,6 +294,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   console.log('INSERT_REFUSE_AND_APPEND_OK');
 
   // ─── ⑧ 后半：init prompt 编辑生效 → STORE 往返 → 恢复默认 ───
+  // Post B owns a separate collapsed prompt panel; open it before editing.
+  if (!(await page.locator('#bx-init-prompt').evaluate(el => el.open))) await page.locator('#bx-init-prompt summary').click();
   await page.locator('#bx-init-prompt-text').fill(CUSTOM_PROMPT);
   await page.locator('#bx-init-prompt-save').click();
   let stored = null;
@@ -338,7 +340,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   assert.equal(draftsA[0].text, 'AFTER_RESET_DRAFT', '上报的是被检查的稿件');
   assert.equal(draftsA[0].origin, 'ai', '生成后未手改 = ai（不得当作掌握证据）');
   assert.equal(draftsA[0].context, 'reply');
-  assert(String(draftsA[0].url).includes('/b/status/222'), `url 为回复对象：${draftsA[0].url}`);
+  assert(String(draftsA[0].url).endsWith('/status/222'), `url 为回复对象：${draftsA[0].url}`);
   assert(typeof draftsA[0].at === 'number' && draftsA[0].at > 0, 'at 时间戳');
   await page.waitForFunction(d => document.querySelector('#bx-draft')?.value === d, UNIFIED_CHECK.draft, { timeout: 8000 });
   assert.equal(await draftBox.inputValue(), UNIFIED_CHECK.draft, '检查结果：①完整回复进入草稿区');

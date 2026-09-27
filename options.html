@@ -24,7 +24,15 @@
       <div class="field"><label for="provider-key">API Key <small>用于翻译、语法讲解和表达检查</small></label><input id="provider-key" type="password" autocomplete="off" placeholder="在服务商控制台获取"></div>
       <div class="test-row"><button type="button" id="test-model" class="secondary">测试连接</button><span id="test-result" role="status"></span></div>
       <div class="privacy">自动模式下，进入帖子或文章详情时，正文会发往所选模型；手动模式下点击翻译才发送，可能消耗你的模型额度；点击生成、检查或讲解时也会发送相应上下文与输入。OpenAI 请求设为 store: false；其他服务商的留存规则以其说明为准。密钥仅保存在此浏览器的扩展本地存储，不会同步或写入 X。</div>
-      <label class="switch-row"><span>进入详情页自动翻译（可能消耗额度）</span><input id="auto-translate" type="checkbox" checked></label><label class="switch-row"><span>悬停单词显示词卡</span><input id="hover-lookup" type="checkbox" checked></label><button class="primary" id="save-main">保存设置</button>
+      <label class="switch-row"><span>进入详情页自动翻译（可能消耗额度）</span><input id="auto-translate" type="checkbox" checked></label><label class="switch-row"><span>悬停单词显示词卡</span><input id="hover-lookup" type="checkbox" checked></label><section class="dictionary-box"><h2>写作 Agent</h2>
+<a href="write/desk.html" target="_blank" rel="noopener">打开 Markdown 写作台 ↗</a>
+<div class="field"><label for="agent-provider">运行时</label><select id="agent-provider"><option value="ollama">Ollama</option><option value="opencode">OpenCode 本地服务</option></select></div>
+<div class="field"><label for="agent-base-url">Agent 地址</label><input id="agent-base-url" placeholder="http://127.0.0.1:11434"></div>
+<div class="field"><label for="agent-model">Ollama 模型</label><input id="agent-model" placeholder="qwen3:8b"></div>
+<div class="field"><label for="agent-key">Ollama Cloud Key / OpenCode 服务密码（用户名 opencode）</label><input id="agent-key" type="password" autocomplete="off"></div>
+<button id="test-agent">授权并检测已保存的 Agent 配置</button><p id="agent-connection" role="status"></p>
+<small>先保存，再检测。仅允许本机 11434 / 4096 端口，或 Ollama Cloud。点击发送时才发送勾选材料与会话历史；云模型可能收费。OpenCode 使用自己的模型配置、保留远端会话，工具全部禁用。</small></section>
+<button class="primary" id="save-main">保存设置</button>
     </section>
     <section data-panel="filters" hidden>
       <div class="intro"><h2>用自然语言过滤</h2><p>写下想折叠的帖子类型。Jev 只判断是否命中规则；不确定时保持原帖可见，折叠后可随时展开。</p></div>
@@ -51,7 +59,7 @@
       <div id="mdx-root"></div>
       <div class="privacy">MDX 解析与索引全部在本机 IndexedDB 完成，词库文件不上传、不进安装包、不发给模型。在线兜底查询会把单词发送给 MyMemory 与 Free Dictionary API。你提供的 `.eubak` 只是指向 `.mdx` 的配置，本身不含词条。</div>
     </section>
-  <section class="dictionary-box"><h2>本地数据与迁移</h2><p>导出设置、草稿、练习、收藏和学习记录，不含 API 密钥。MDX 词典需用原文件重新导入。</p><button id="export-backup">导出全部数据</button><label class="file-button">选择备份<input id="import-backup" type="file" accept=".json,application/json"></label><p id="backup-preview"></p><button id="confirm-import" hidden>确认合并导入</button><h3>按帖子保存的工作</h3><div class="field"><input id="session-search" type="search" placeholder="搜索摘要、草稿、选句或帖子 ID" aria-label="搜索保存的记录"></div><button id="refresh-sessions">刷新记录</button><div id="session-list"></div></section></main>
+  <section class="dictionary-box"><h2>本地数据与迁移</h2><p>导出设置、草稿、练习、收藏和学习记录，含 Markdown 文稿与 Agent 历史，不含 API 密钥、服务密码或 OpenCode 远端会话 ID。MDX 词典需用原文件重新导入。</p><button id="export-backup">导出全部数据</button><label class="file-button">选择备份<input id="import-backup" type="file" accept=".json,application/json"></label><p id="backup-preview"></p><button id="confirm-import" hidden>确认合并导入</button><h3>按帖子保存的工作</h3><div class="field"><input id="session-search" type="search" placeholder="搜索摘要、草稿、选句或帖子 ID" aria-label="搜索保存的记录"></div><button id="refresh-sessions">刷新记录</button><div id="session-list"></div></section></main>
   <div id="status" role="status" aria-live="polite"></div>
   <footer>巴别塔（回译）· 本地优先 · 插入草稿后由你确认发布</footer>
 </body>

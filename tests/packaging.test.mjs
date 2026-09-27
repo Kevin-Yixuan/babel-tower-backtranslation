@@ -20,6 +20,22 @@ const repoRoot = path.resolve(here, '..');
 const buildScript = path.join(repoRoot, 'scripts', 'build-package.mjs');
 const verifyScript = path.join(repoRoot, 'scripts', 'verify-package.mjs');
 
+test('实际扩展包包含写作台完整运行文件与隐私说明', () => {
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'bx-agent-package-'));
+  try {
+    const built = spawnSync(process.execPath, [buildScript, '--root', repoRoot, '--out', out, '--previous', '0.2.2'], { encoding: 'utf8' });
+    assert.equal(built.status, 0, built.stderr);
+    const report = JSON.parse(fs.readFileSync(path.join(out, 'package-report.json'), 'utf8'));
+    const zip = path.join(out, report.zip);
+    const entries = readZipEntries(zip);
+    for (const name of ['write/desk.html', 'write/desk.js', 'write/desk.css', 'write/markdown.js', 'services/agent.js', 'modules/agent/agent.js', 'privacy.md']) {
+      const entry = entries.find(item => item.name === `babel-tower-backtranslation-${report.version}/${name}`);
+      assert.ok(entry, `ZIP missing ${name}`);
+      assert.deepEqual(readZipEntryData(zip, entry), fs.readFileSync(path.join(repoRoot, name)));
+    }
+  } finally { fs.rmSync(out, { recursive: true, force: true }); }
+});
+
 function runNode(args, cwd, env) {
   const result = spawnSync(process.execPath, args, {
     cwd,
@@ -230,6 +246,7 @@ test('构建出的包只有一个顶层目录，根目录文件齐全', () => {
   // manifest 的 options_page 指向 options.html，二者必须随包，设置页才能打开。
   assert.ok(entries.some((item) => item.name === 'babel-tower-backtranslation-0.3.0/options.html'));
   assert.ok(entries.some((item) => item.name === 'babel-tower-backtranslation-0.3.0/options.js'));
+  assert.ok(entries.some((item) => item.name === 'babel-tower-backtranslation-0.3.0/write/write-main.js'));
   // 已退役的更新机制文件不得进包。
   for (const name of entries.map((item) => item.name)) {
     assert.doesNotMatch(name, /update-(unpacked\.ps1|marker\.json)$/);

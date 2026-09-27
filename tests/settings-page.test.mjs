@@ -202,6 +202,13 @@ function buildDocument() {
   for (const panel of ['home', 'filters', 'saved', 'dictionary']) {
     element(doc, 'section', { dataset: { panel }, hidden: panel !== 'home' });
   }
+  element(doc, 'input', { id: 'agent-base-url' });
+  element(doc, 'input', { id: 'agent-model' });
+  element(doc, 'input', { id: 'agent-key', type: 'password' });
+  element(doc, 'button', { id: 'test-agent' });
+  element(doc, 'div', { id: 'agent-connection' });
+  const agentSelect = element(doc, 'select', { id: 'agent-provider' });
+  optionIn(agentSelect, 'ollama'); optionIn(agentSelect, 'opencode');
   element(doc, 'input', { id: 'provider-label' });
   element(doc, 'input', { id: 'provider-base-url' });
   element(doc, 'input', { id: 'provider-model' });

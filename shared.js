@@ -25,6 +25,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   },
   model: 'gpt-6-luna', // legacy field, migrated into providers.openai.model on first load
   targetLanguage: '英语',
+  agentProvider: 'ollama',
+  agentBaseUrl: 'http://127.0.0.1:11434',
+  agentModel: 'qwen3:8b',
   filterEnabled: false,
   filterRules: [],
   filterThreshold: 0.82,
@@ -76,7 +79,8 @@ export function joinUrl(baseUrl, path) {
 
 export function permissionOrigin(raw) {
   const url = new URL(normalizeBaseUrl(raw));
-  return `${url.protocol}//${url.host}/*`;
+  // Chrome match patterns do not accept ports; request the host, validate ports in transport.
+  return `${url.protocol}//${url.hostname}/*`;
 }
 
 export function buildChatRequest({ instructions, input, schema = null, maxOutputTokens = 1200, provider = null }) {

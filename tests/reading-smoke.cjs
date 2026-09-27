@@ -202,9 +202,13 @@ const say = line => { log.push(line); console.log(line); };
   await tweets.locator('#a .bx-inline-button').first().waitFor({ timeout: 15000 });
   await worker.evaluate(() => { globalThis.__hold = true; globalThis.__pending = []; globalThis.__requests = []; });
   await tweets.locator('#a .bx-inline-button').click();
-  await waitPending(1); // A 的自动翻译挂起
+  // Restored scope is selection; explicitly choose full material, then request it.
+  await tweets.locator('#bx-read-scope').selectOption('full');
+  await tweets.locator('#bx-retranslate').click();
+  await waitPending(1); // A full translation is now in flight
   await selectRange(tweets, '#a [data-testid="tweetText"]', 0, 33);
-  await waitPending(2); // A 的选中句子也按独立范围翻译
+  await tweets.locator('#bx-translate-now').click();
+  await waitPending(2); // selected sentences require explicit translation
   const aBody = await tweets.locator('#bx-body').innerText();
   assert(aBody.includes(SENTENCE_A), 'A 选区在 A 上下文可见');
   assert.equal(await tweets.locator('.bx-pair-src').first().innerText(), SENTENCE_A, '选句只翻译选中内容');

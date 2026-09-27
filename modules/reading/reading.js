@@ -395,7 +395,7 @@
     await Promise.all([prefsReady, window.BXSession?.ready]);
     if (requestedKey !== window.BXSession?.key) return;
     if (!explicit && (stopped || state.settings?.autoTranslate === false || readScope !== 'full')) return;
-    if (!state.settings?.hasModel) { if (explicit) { state.error = '请先打开设置，填写 API 并测试连接。'; refresh(); } return; }
+    if (!state.settings?.hasModel) { if (explicit) { state.error = `先在插件设置中填写 ${state.settings?.providers?.[state.settings?.modelProvider]?.label || '模型'} API Key。`; refresh(); } return; }
     if (explicit) stopped = false;
     ensureSource();
     const reading = state.reading;
@@ -638,7 +638,10 @@
     container.querySelector('#bx-retranslate')?.addEventListener('click', () => {
       const reading = state.reading;
       if (reading.busy) return;
-      reading.units.forEach(unit => { unit.status = 'pending'; unit.dst = ''; unit.error = ''; });
+      reading.units.forEach(unit => {
+        cache.delete(readSource + '|' + readTarget + '|' + modelSignature + '|' + unit.src);
+        unit.status = 'pending'; unit.dst = ''; unit.error = '';
+      });
       reading.error = '';
       reading.notice = '';
       maybeStartAuto(true);

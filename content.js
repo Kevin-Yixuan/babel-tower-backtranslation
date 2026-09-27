@@ -51,7 +51,7 @@
     // X navigates without reloading content scripts. The prior post, selection, editor,
     // and in-flight answers must not be reused on the next route.
     const key = window.BXContext.key(location.href);
-    if (key !== previousKey) {
+    if (key !== previousKey || (!key && window.BX.state.post)) {
       window.BX.setPost(key ? { url: window.BXContext.canonical(location.href), text: '', author: '' } : null, { reset: true });
     }
     if (window.BX.element.classList.contains('bx-open')) window.BX.refresh();

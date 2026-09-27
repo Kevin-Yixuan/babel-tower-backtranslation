@@ -1,11 +1,11 @@
 {
   "name": "backwrite-x",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/core.test.mjs tests/content-scan.test.mjs tests/writing.test.mjs tests/ripemd.test.mjs tests/mdx-html.test.mjs tests/mdx-pipeline.test.mjs tests/release.test.mjs tests/sessions.test.mjs tests/settings-core.test.mjs tests/settings-page.test.mjs",
-    "test:browser": "node tests/smoke.cjs && node tests/writing-smoke.cjs && node tests/adversarial-smoke.cjs && node tests/workbench-smoke.cjs && node tests/timeline.cjs && node tests/jev-adversarial.cjs && node tests/dictionary-wiring.cjs && node tests/reading-smoke.cjs && node tests/translation-controls.cjs && node tests/reply-smoke.cjs && node tests/growth-logic.cjs && node tests/growth-smoke.cjs && node tests/discovery-smoke.cjs && node tests/release-regressions.cjs && node tests/ux-browser.cjs",
+    "test": "node --test tests/core.test.mjs tests/content-scan.test.mjs tests/writing.test.mjs tests/ripemd.test.mjs tests/mdx-html.test.mjs tests/mdx-pipeline.test.mjs tests/release.test.mjs tests/sessions.test.mjs tests/settings-core.test.mjs tests/settings-page.test.mjs tests/agent.test.mjs tests/markdown.test.mjs",
+    "test:browser": "node tests/smoke.cjs && node tests/writing-smoke.cjs && node tests/adversarial-smoke.cjs && node tests/workbench-smoke.cjs && node tests/timeline.cjs && node tests/jev-adversarial.cjs && node tests/dictionary-wiring.cjs && node tests/reading-smoke.cjs && node tests/translation-controls.cjs && node tests/reply-smoke.cjs && node tests/growth-logic.cjs && node tests/growth-smoke.cjs && node tests/discovery-smoke.cjs && node tests/release-regressions.cjs && node tests/ux-browser.cjs && node tests/agent-smoke.cjs",
     "test:ux": "node tests/ux-browser.cjs"
   }
 }

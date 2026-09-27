@@ -101,7 +101,7 @@ const longHtml = `<!doctype html><html><body><main>
 
   // ─── 1. 平铺双编辑框：审计复现（打开A → 聚焦B → 插入）必须拒绝写入，仅复制 ───
   const flat = await openFixture(flatHtml, 'https://x.com/fixture-flat');
-  await flat.locator('#a .bx-inline-button').click();
+  await flat.locator('#a .bx-entry-reply').click();
   await flat.locator('[data-bx-mode="write"]').click();
   await flat.locator('#bx-idea').fill('我想回应A');
   await flat.locator('#bx-draft').fill('Reply written for A');
@@ -123,7 +123,7 @@ const longHtml = `<!doctype html><html><body><main>
 
   // ─── 2. 帖内编辑框：预览A → 聚焦B → 确认只写A；已有文字追加；目标移除后拒绝 ───
   const nested = await openFixture(nestedHtml, 'https://x.com/fixture-nested');
-  await nested.locator('#a .bx-inline-button').click();
+  await nested.locator('#a .bx-entry-reply').click();
   await nested.locator('[data-bx-mode="write"]').click();
   await nested.locator('#bx-idea').fill('我想回应A');
   await nested.locator('#edA').focus();
@@ -161,7 +161,7 @@ const longHtml = `<!doctype html><html><body><main>
 
   // ─── 3. 在途模型保护 ───
   const race = await openFixture(flatHtml, 'https://x.com/fixture-race');
-  await race.locator('#a .bx-inline-button').click();
+  await race.locator('#a .bx-entry-reply').click();
   await race.locator('[data-bx-mode="write"]').click();
   await race.locator('#bx-idea').fill('想法');
   await race.locator('#bx-generate').click();
@@ -189,15 +189,15 @@ const longHtml = `<!doctype html><html><body><main>
   await race.locator('#bx-generate').click();
   await waitPending(1);
   await race.locator('#bx-close').click();
-  await race.locator('#b .bx-inline-button').click(); // openArticle 切到 B（模式回到 read）
+  await race.locator('#b .bx-entry-reply').click(); // openArticle 切到 B（模式回到 read）
   await releaseHold('POST_SWITCH_RESULT');
   await race.waitForTimeout(500);
   await race.locator('[data-bx-mode="write"]').click();
   assert.equal(await race.locator('#bx-draft').inputValue(), '', '切到 B 后不得带入 A 的草稿');
+  assert((await race.locator('#bx-body').innerText()).includes('已切换回复对象'), '晚到结果被忽略时有明确提示');
   await race.locator('#a .bx-entry-reply').click();
   assert.equal(await race.locator('#bx-draft').inputValue(), 'I changed this while waiting', '返回 A 时原稿仍在');
   await race.locator('#b .bx-entry-reply').click();
-  assert((await race.locator('#bx-body').innerText()).includes('已切换回复对象'), '切帖有明确提示');
   console.log('POST_SWITCH_DISCARDS_LATE_RESULT');
 
   // 检查反馈不得挂到已变化的输入
@@ -213,7 +213,7 @@ const longHtml = `<!doctype html><html><body><main>
 
   // IME 组合态：组合期间响应不得重建正在输入的编辑框
   console.log('IME_STEP open A');
-  await race.locator('#a .bx-inline-button').click();
+  await race.locator('#a .bx-entry-reply').click();
   await race.locator('[data-bx-mode="write"]').click();
   console.log('IME_STEP fill idea');
   await race.locator('#bx-idea').fill('中文想法');

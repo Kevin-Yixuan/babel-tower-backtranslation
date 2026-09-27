@@ -1,11 +1,12 @@
 import { sessionOp } from './sessions.js';
 import { normalizeSettings, validateProviders } from './settings.js';
 const arrays = ['writingDrafts', 'cards', 'growthMemories', 'savedPhrases'];
-const objects = ['growthSettings', 'discoveryPrefs', 'readingPrefs', 'glossary'];
+const objects = ['growthSettings', 'discoveryPrefs', 'readingPrefs', 'glossary', 'documents', 'agentSessions'];
 const keys = ['settings', 'initPrompt', ...arrays, ...objects];
 
 export async function exportBackup() {
   const stored = await chrome.storage.local.get(keys);
+  if (stored.agentSessions) stored.agentSessions = cleanAgentSessions(stored.agentSessions);
   if (stored.settings) stored.settings = { ...normalizeSettings(stored.settings), providers: validateProviders(normalizeSettings(stored.settings).providers) };
   return { format: 'babel-tower-backup', version: 1, createdAt: new Date().toISOString(),
     storage: stored, sessions: await sessionOp({ op: 'list' }), dictionary: { action: 'reimport-mdx-original' } };
@@ -69,6 +70,8 @@ export async function previewBackup(archive) {
 
 export async function importBackup(archive) {
   const counts = validateBackup(archive);
+  archive = structuredClone(archive);
+  if (archive.storage.agentSessions) archive.storage.agentSessions = cleanAgentSessions(archive.storage.agentSessions);
   const plan = await planImport(archive);
   const old = await chrome.storage.local.get(keys);
   const next = {};
@@ -100,4 +103,11 @@ export async function importBackup(archive) {
   try { await chrome.storage.local.set(next); }
   catch { throw new Error('帖子会话已导入，其余数据保存失败。原数据保留；请导出备份并清理空间后重试。'); }
   return { ...counts, ...plan, dictionary: '请用原始 MDX 文件重新导入词典。密钥需在新安装中重新填写。' };
+}
+
+function cleanAgentSessions(sessions) {
+  return Object.fromEntries(Object.entries(sessions).map(([id, session]) => {
+    const { remoteId, ...local } = session;
+    return [id, local];
+  }));
 }

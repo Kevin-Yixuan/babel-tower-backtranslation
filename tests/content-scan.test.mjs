@@ -35,7 +35,7 @@ function host() {
   const document = { body: {}, querySelectorAll: () => [article], addEventListener() {} };
   class MutationObserver { constructor(callback) { scanAgain = callback; } observe() {} }
   runInNewContext(source, { window, document, location, MutationObserver, chrome: { runtime: { onMessage: { addListener() {} } } }, setInterval() {}, setTimeout: fn => fn(), clearTimeout() {} });
-  return { calls, listeners, location, textNode, scan: () => scanAgain() };
+  return { calls, listeners, location, textNode, selectPost: post => { bx.state.post = post; }, scan: () => scanAgain() };
 }
 
 test('rescanning the same post keeps its active session and requests', () => {
@@ -49,6 +49,17 @@ test('rescanning the same post keeps its active session and requests', () => {
 test('leaving a post route clears its previous context', () => {
   const page = host();
   page.location.href = 'https://x.com/home';
+  page.listeners.popstate();
+  assert.equal(page.calls.at(-1).post, null);
+});
+
+test('navigating between non-post routes clears a manually selected post', () => {
+  const page = host();
+  page.location.href = 'https://x.com/home';
+  page.listeners.popstate();
+  // Select a post on a timeline, then navigate to a long article route.
+  page.selectPost({ url: 'https://x.com/writer/status/111', text: 'Selected on timeline' });
+  page.location.href = 'https://x.com/explore';
   page.listeners.popstate();
   assert.equal(page.calls.at(-1).post, null);
 });
