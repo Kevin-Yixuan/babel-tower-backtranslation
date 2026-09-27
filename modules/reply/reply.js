@@ -244,8 +244,9 @@
   // 不确定时拒绝写入（仅复制）；绝不回退到页面第一个编辑框。
   function resolveInsertTarget() {
     const sessionPost = state.post;
+    const postKey = window.BXContext?.key(sessionPost?.url || '');
     const sessionLabel = sessionPost ? `回复对象是 @${sessionPost.author || '当前作者'}，但` : '尚未打开帖子，';
-    if (!sessionPost?.url || !sessionPost.text) {
+    if (!postKey?.startsWith('post:') || !sessionPost.text) {
       return { ok: false, editor: null, post: sessionPost, reasonText: '尚未确定要回复的帖子。请从帖内「回复」入口打开，或复制草稿手动粘贴。' };
     }
     const stateEditorOK = state.editor?.isConnected && visibleInPage(state.editor);
@@ -257,15 +258,15 @@
     const ownArticle = editor.closest('article');
     if (ownArticle) {
       const ownPost = postFrom(ownArticle);
-      if (ownPost.url !== sessionPost.url) {
+      if (window.BXContext.key(ownPost.url) !== postKey) {
         return { ok: false, editor, post: sessionPost, reasonText: `${sessionLabel}当前聚焦的发帖框属于另一条帖子（${ownPost.author || ownPost.url}），拒绝跨帖写入。` };
       }
-      return { ok: true, editor, post: sessionPost };
+      return { ok: true, editor, post: sessionPost, article: ownArticle };
     }
     // X can put the reply composer outside the article. Only accept a dialog that
     // contains exactly one status permalink, and that permalink must be our post.
     const dialog = editor.closest('[role="dialog"]');
-    if (dialog && visible.length === 1 && dialogPostUrls(dialog).length === 1 && dialogPostUrls(dialog)[0] === sessionPost.url) {
+    if (dialog && visible.length === 1 && dialogPostUrls(dialog).length === 1 && dialogPostUrls(dialog)[0] === postKey) {
       return { ok: true, editor, post: sessionPost, dialog };
     }
     return { ok: false, editor, post: sessionPost, reasonText: `${sessionLabel}这个独立编辑框没有可核对的原帖链接，不能证明它是正确的回复框。请使用「复制草稿」。` };
@@ -275,7 +276,8 @@
     return [...new Set([...dialog.querySelectorAll('a[href*="/status/"]')]
       .map(a => a.getAttribute('href'))
       .filter(href => /\/status\/\d+/.test(href || ''))
-      .map(href => new URL(href, location.origin).href))];
+      .map(href => window.BXContext.key(new URL(href, location.origin).href))
+      .filter(key => key.startsWith('post:')))];
   }
 
   async function copyDraft() {
@@ -296,20 +298,25 @@
       state.insertConfirm = false; state.binding = null;
       BX.refresh(); return;
     }
-    if (binding.post && state.post && binding.post.url !== state.post.url) {
+    if (window.BXContext.key(binding.post?.url || '') !== window.BXContext.key(state.post?.url || '') || !window.BXContext.key(state.post?.url || '').startsWith('post:')) {
       state.error = '回复对象已切换，为避免插错帖子，未写入任何内容。请用「复制草稿」手动粘贴。';
       state.insertConfirm = false; state.binding = null;
       BX.refresh(); return;
     }
     const editor = binding.editor;
+    if (binding.article && (!binding.article.isConnected || editor.closest('article') !== binding.article)) {
+      state.error = '目标发帖框的归属已变化，未写入任何内容。请重新打开回复框。';
+      state.insertConfirm = false; state.binding = null;
+      BX.refresh(); return;
+    }
     if (binding.dialog && (!binding.dialog.isConnected || !binding.dialog.contains(editor)
-      || dialogPostUrls(binding.dialog).length !== 1 || dialogPostUrls(binding.dialog)[0] !== binding.post?.url)) {
+      || dialogPostUrls(binding.dialog).length !== 1 || dialogPostUrls(binding.dialog)[0] !== window.BXContext.key(binding.post?.url || ''))) {
       state.error = '回复弹层的原帖已变化，未写入任何内容。请重新打开回复框或复制草稿。';
       state.insertConfirm = false; state.binding = null;
       BX.refresh(); return;
     }
     const ownArticle = editor.closest('article');
-    if (ownArticle && binding.post && postFrom(ownArticle).url !== binding.post.url) {
+    if (ownArticle && window.BXContext.key(postFrom(ownArticle).url) !== window.BXContext.key(binding.post?.url || '')) {
       state.error = '目标发帖框所属帖子已变化，未写入任何内容。请用「复制草稿」手动粘贴。';
       state.insertConfirm = false; state.binding = null;
       BX.refresh(); return;

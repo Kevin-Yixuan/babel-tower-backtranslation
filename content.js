@@ -29,7 +29,8 @@
     translate.className = 'bx-inline-button bx-entry';
     translate.dataset.bxEntry = 'read';
     translate.textContent = '翻译';
-    translate.onclick = event => { event.preventDefault(); event.stopPropagation(); window.BX.emit('translate-full', {}); openForPost(article, 'read'); };
+    // 先切到本帖会话，再发翻译意图：意图必须落到被点击的帖子，不能写进上一帖的会话。
+    translate.onclick = event => { event.preventDefault(); event.stopPropagation(); openForPost(article, 'read'); window.BX.emit('translate-full', {}); };
     const reply = document.createElement('button');
     reply.type = 'button';
     reply.className = 'bx-entry bx-entry-reply';
@@ -45,17 +46,29 @@
   let observedHref = location.href;
   function reconcileLocation() {
     if (location.href === observedHref) return;
+    const previousKey = window.BXContext.key(observedHref);
     observedHref = location.href;
     // X navigates without reloading content scripts. The prior post, selection, editor,
     // and in-flight answers must not be reused on the next route.
-    window.BX.setPost(null, { reset: true, force: true });
+    const key = window.BXContext.key(location.href);
+    if (key !== previousKey || (!key && window.BX.state.post)) {
+      window.BX.setPost(key ? { url: window.BXContext.canonical(location.href), text: '', author: '' } : null, { reset: true });
+    }
     if (window.BX.element.classList.contains('bx-open')) window.BX.refresh();
   }
   function scan() {
     reconcileLocation();
+    const routeKey = window.BXContext.key(location.href);
     document.querySelectorAll('article[data-testid="tweet"], article').forEach(article => {
       const textNode = article.querySelector('[data-testid="tweetText"]');
       if (!textNode) return;
+      const parsed = window.BX.util.postFrom(article);
+      // A DOM rescan is not a new user selection. onArticle handles body growth;
+      // avoid repeatedly entering the session switch path for an unchanged post.
+      if (routeKey && window.BXContext.key(parsed.url) === routeKey
+        && window.BXContext.key(window.BX.state.post?.url) !== routeKey) {
+        window.BX.setPost(parsed, { reset: true });
+      }
       const key = postKey(article);
       const sig = postTextSignature(article);
       if (article.dataset.bxReady) {
@@ -88,6 +101,7 @@
   // pushState does not fire popstate; keep this inexpensive route check as a fallback
   // when X changes the URL before it mounts the next article.
   setInterval(reconcileLocation, 500);
+  if (window.BXContext.key(location.href)) window.BX.setPost({ url: window.BXContext.canonical(location.href), text: '', author: '' }, { reset: true });
   scan();
 
   document.addEventListener('focusin', event => { if (isEditor(event.target)) notifyEditor(event.target); });
@@ -96,7 +110,7 @@
   // 设置变化由 background.js 收到 storage 事件后广播 BX_SETTINGS_CHANGED 过来。
   chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     if (message?.action === 'BX_SETTINGS_CHANGED') {
-      window.BX.send('PUBLIC_SETTINGS').then(applySettings).catch(() => {});
+      window.BX.awaitSettings(window.BX.send('PUBLIC_SETTINGS').then(applySettings).catch(error => { window.BX.state.error = '设置加载失败：' + error.message; }));
       respond({ ok: true });
     }
     return false;

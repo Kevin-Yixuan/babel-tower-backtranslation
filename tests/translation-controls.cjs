@@ -74,7 +74,7 @@ const path = require('node:path');
     await page.locator('#bx-read-manual').fill(manual);
     await page.waitForTimeout(1100);
     assert.equal((await requests()).length, countBeforeManual, '手动输入期间不自动发送半成品');
-    await page.locator('#bx-read-manual-submit').click();
+    await page.locator('#bx-translate-now').click();
     await page.waitForFunction(() => document.querySelector('.bx-pair-dst.bx-done'));
     const manualReq = (await requests()).at(-1);
     assert(manualReq.input.includes(manual) && !manualReq.input.includes('SECOND_SENTENCE'));
@@ -102,6 +102,7 @@ const path = require('node:path');
     }, selected.length);
     await page.waitForFunction(() => document.querySelector('#bx-read-scope')?.value === 'selection'
       && document.querySelector('.bx-pair-src')?.textContent === 'Writing changes how we think.');
+    await page.locator('#bx-translate-now').click();
     await page.locator('.bx-pair-dst.bx-done').first().waitFor();
     const selectedReq = (await requests()).at(-1);
     assert(selectedReq.input.includes(selected) && !selectedReq.input.includes('SECOND_SENTENCE'));

@@ -26,6 +26,19 @@
   let readTarget = '中文';
   let readScope = 'full'; // full | selection | manual
   let manualText = '';
+  function rememberInput() {
+    state.readingInput = { scope: readScope, manualText, source: readSource, target: readTarget };
+    window.BXSession?.touch('readingInput');
+  }
+  function restoreInput() {
+    const saved = state.readingInput || {};
+    readScope = ['full', 'selection', 'manual'].includes(saved.scope) ? saved.scope : 'full';
+    if (readScope === 'selection' && !state.selected) readScope = 'full';
+    manualText = typeof saved.manualText === 'string' ? saved.manualText : '';
+    readSource = ['自动检测', ...LANGUAGES].includes(saved.source) ? saved.source : readSource;
+    readTarget = LANGUAGES.includes(saved.target) ? saved.target : readTarget;
+    state.readingInput = { scope: readScope, manualText, source: readSource, target: readTarget };
+  }
   let prefsTouched = false;
   let prefsWrite = Promise.resolve();
 
@@ -64,11 +77,37 @@
   let readVisible = false;   // 阅读页签渲染过（观察器据此决定是否刷新）
   let autoAbandon = false;   // 本次阅读渲染后切到过其他页签 → 放弃本轮自动翻译
   let autoTimer = 0;
+  let stopped = false;
+  const cache = new Map();
+  let modelSignature = '';
+  let prefsReady = Promise.resolve();
+  const wordRequests = new Map();
+  function lookupWord(word) {
+    const key = word.toLowerCase();
+    if (!wordRequests.has(key)) {
+      if (wordRequests.size >= 150) wordRequests.delete(wordRequests.keys().next().value);
+      wordRequests.set(key, send('LOOKUP', { word }).catch(error => { wordRequests.delete(key); throw error; }));
+    }
+    return wordRequests.get(key);
+  }
   const activeMode = () => BX.element.querySelector('.bx-tabs .bx-active')?.dataset?.bxMode || '';
   BX.on('translate-full', () => {
-    readScope = 'full';
-    state.selected = '';
-    state.reading = freshReading();
+    // 切帖时取材模式由会话恢复决定（新帖默认全文，旧会话还原）；只有同帖、没有恢复在进行时
+    // 才强制全文，否则会把“全文”写进上一帖的会话，抹掉未提交的手动原稿。
+    if (!state.sessionLoading) {
+      readScope = 'full';
+      state.selected = '';
+      window.BXSession?.touch('selected'); rememberInput();
+    }
+    stopped = false;
+    setTimeout(() => {
+      Promise.all([prefsReady, window.BXSession?.ready]).then(() => {
+        // 已恢复为手动/划选的原稿需要用户主动翻译，自动翻译入口只跑全文。
+        if (readScope !== 'full') return;
+        ensureSource();
+        maybeStartAuto(true);
+      }).catch(() => {});
+    }, 0);
   });
 
   // ---- 模块自有样式（公共 CSS 不改；浮窗小尺寸，不遮挡大片网页）----
@@ -126,7 +165,7 @@
     wordPop.innerHTML = `<div class="bx-pop-word">${esc(word)}</div><p class="bx-pop-src">查询中…</p>`;
     placePop(rect);
     wordPop.classList.add('bx-show');
-    send('LOOKUP', { word }).then(data => {
+    lookupWord(word).then(data => {
       if (token !== popToken) return; // 已被新浮窗/关闭取代
       wordPop.innerHTML = `<div class="bx-pop-word">${esc(word)}</div>`
         + (data.chinese ? `<p class="bx-pop-chinese">${esc(data.chinese)}</p>` : '')
@@ -139,26 +178,39 @@
     });
   }
 
+  // 悬停与划选共用词界；字符流由调用方从同一正文根节点展平，允许跨内联元素。
+  window.BXWordBoundary = (text, start, end = start) => {
+    if (start < 0 || end < start || end > text.length) return null;
+    if (start !== end && (/\s/.test(text.slice(start, end)) || !/[A-Za-z]/.test(text.slice(start, end)))) return null;
+    const isWord = ch => Boolean(ch && /[A-Za-z0-9'’-]/.test(ch));
+    let s = start, e = end;
+    while (s > 0 && isWord(text[s - 1])) s--;
+    while (e < text.length && isWord(text[e])) e++;
+    const raw = text.slice(s, e);
+    const lead = raw.match(/^['’-]*/)?.[0].length || 0;
+    const trail = raw.match(/['’-]*$/)?.[0].length || 0;
+    s += lead; e -= trail;
+    const word = text.slice(s, e);
+    return /^[A-Za-z][A-Za-z0-9'’-]{0,79}$/.test(word) ? { word, start: s, end: e } : null;
+  };
+
   // 词界补全：选中单词的一部分（如 "writ"）时向两侧扩展到完整英文单词（如 "writing"）。
+  window.BXLookup = { show: showWordPop, hide: hideWordPop };
+
   function expandWord(selection) {
     if (selection.rangeCount !== 1) return null;
     const range = selection.getRangeAt(0);
-    if (range.collapsed || range.startContainer !== range.endContainer) return null;
-    const node = range.startContainer;
-    if (node.nodeType !== 3) return null;
-    const text = node.data;
-    let s = range.startOffset;
-    let e = range.endOffset;
-    if (s >= e) return null;
-    const slice = text.slice(s, e);
-    if (/\s/.test(slice) || !/[A-Za-z]/.test(slice)) return null; // 含空白/非英文 → 按句子处理
-    const isWordChar = ch => ch !== undefined && /[A-Za-z0-9'’-]/.test(ch);
-    while (s > 0 && isWordChar(text[s - 1])) s--;
-    while (e < text.length && isWordChar(text[e])) e++;
-    const match = text.slice(s, e).match(/[A-Za-z][A-Za-z0-9'’-]*/);
-    if (!match) return null;
-    const word = match[0].replace(/[-']+$/, '');
-    return word ? { word } : null;
+    if (range.collapsed || range.startContainer.nodeType !== 3 || range.endContainer.nodeType !== 3) return null;
+    const root = range.startContainer.parentElement?.closest(TEXT_RANGE);
+    if (!root || !root.contains(range.endContainer)) return null;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let text = '', node, start = -1, end = -1;
+    while ((node = walker.nextNode())) {
+      if (node === range.startContainer) start = text.length + range.startOffset;
+      if (node === range.endContainer) end = text.length + range.endOffset;
+      text += node.data;
+    }
+    return window.BXWordBoundary(text, start, end);
   }
 
   function selectionRect(selection) {
@@ -219,18 +271,19 @@
       if (BX.element.classList.contains('bx-open') && activeMode() === 'read') refresh();
       return;
     }
-    // 任务书 ⑥ 后半：句子 → 设置 state.selected 并打开阅读页签（与选区条行为衔接）。
     hideWordPop();
-    if (container.matches('[data-testid="tweetText"]')) {
-      const tweet = container.closest('article');
-      if (tweet) setPost(postFrom(tweet), { reset: true });
-    } else if (state.post) {
-      setPost(null, { reset: true });
+    // 选区锚点一定在 container（TEXT_RANGE）里；用 container 定位所属 article，
+    // 与旧逻辑一致（anchorEl 在此作用域未定义，曾导致选句时 ReferenceError）。
+    const article = container.closest('article');
+    if (article) {
+      const post = postFrom(article);
+      const input = { scope: 'selection', manualText: '', source: readSource, target: readTarget };
+      setPost(post, { reset: true, selected: raw.trim(), readingInput: input });
+      if (window.BXSession?.key === window.BXContext?.key(post.url)) restoreInput();
+    } else {
+      state.selected = raw.trim(); window.BXSession?.touch('selected');
+      readScope = 'selection'; rememberInput();
     }
-    state.selected = raw.trim();
-    state.dictionary = null;
-    state.explanation = '';
-    readScope = 'selection';
     showSelectionBar(rect);
     open('read');
   }
@@ -281,22 +334,17 @@
 
   function syncArticle(paras) {
     const reading = state.reading;
-    const key = `article|${location.href}|${readSource}|${readTarget}`;
+    const key = `article|${window.BXContext?.canonical(location.href) || location.href}|${readSource}|${readTarget}`;
     const reset = () => {
       state.reading = { ...freshReading(), kind: 'article', key, units: paras.map(src => ({ src, dst: '', status: 'pending', error: '' })) };
       return 'reset';
     };
     if (reading.kind !== 'article' || reading.key !== key) return reset();
-    const shared = Math.min(paras.length, reading.units.length);
-    for (let i = 0; i < shared; i++) {
-      if (reading.units[i].src !== paras[i]) return reset();
-    }
-    if (paras.length > reading.units.length) {
-      for (let i = reading.units.length; i < paras.length; i++) reading.units.push({ src: paras[i], dst: '', status: 'pending', error: '' });
-      return 'appended';
-    }
-    if (paras.length < reading.units.length) reading.units.length = paras.length;
-    return 'same';
+    if (paras.length === reading.units.length && paras.every((p,i) => p === reading.units[i].src)) return 'same';
+    for (const unit of reading.units) if (unit.status === 'done') cache.set(readSource + '|' + readTarget + '|' + modelSignature + '|' + unit.src, unit.dst);
+    const units = paras.map(src => { const dst = cache.get(readSource + '|' + readTarget + '|' + modelSignature + '|' + src) || ''; return { src, dst, status: dst ? 'done' : 'pending', error: '' }; });
+    state.reading = { ...freshReading(), kind: 'article', key, units };
+    return 'changed';
   }
 
   function ensureSource() {
@@ -319,6 +367,8 @@
       }
       return;
     }
+    const fullArticle = articleParagraphs();
+    if (fullArticle.length && window.BXContext?.key(location.href)) { syncArticle(fullArticle); return; }
     if (post && post.text) {
       const key = `post|${post.url}|${post.text}|${readSource}|${readTarget}`;
       if (reading.kind !== 'post' || reading.key !== key) {
@@ -340,13 +390,23 @@
     autoTimer = setTimeout(maybeStartAuto, AUTO_DELAY_MS);
   }
 
-  function maybeStartAuto() {
+  async function maybeStartAuto(explicit = false) {
+    const requestedKey = window.BXSession?.key;
+    await Promise.all([prefsReady, window.BXSession?.ready]);
+    if (requestedKey !== window.BXSession?.key) return;
+    if (!explicit && (stopped || state.settings?.autoTranslate === false || readScope !== 'full')) return;
+    if (!state.settings?.hasModel) { if (explicit) { state.error = `先在插件设置中填写 ${state.settings?.providers?.[state.settings?.modelProvider]?.label || '模型'} API Key。`; refresh(); } return; }
+    if (explicit) stopped = false;
+    ensureSource();
     const reading = state.reading;
     if (!reading || reading.busy) return;
-    if (!BX.element.classList.contains('bx-open') || activeMode() !== 'read' || autoAbandon) return;
+    const onDetail = Boolean(window.BXContext?.key(location.href));
+    if (!explicit && !onDetail && (!BX.element.classList.contains('bx-open') || activeMode() !== 'read' || autoAbandon)) return;
     const fresh = reading.units.filter(unit => unit.status === 'pending');
     if (!fresh.length) return;
-    fresh.forEach(unit => { unit.status = 'queued'; });
+    for (const unit of fresh) { const cached = cache.get(readSource + '|' + readTarget + '|' + modelSignature + '|' + unit.src); if (cached) { unit.dst = cached; unit.status = 'done'; } }
+    if (fresh.every(unit => unit.status === 'done')) { refresh(); return; }
+    fresh.forEach(unit => { if (unit.status !== 'done') unit.status = 'queued'; });
     reading.busy = true;
     reading.error = '';
     reading.notice = '';
@@ -369,12 +429,15 @@
           }
           const result = await send('AI', { task: 'TRANSLATE', payload: { text: unit.src, source: reading.sourceLang, target: reading.targetLang } });
           if (state.reading !== reading || reading.seq !== seq) return;
-          unit.dst = String(result?.text || '').trim();
-          if (unit.src.trim().length > 15 && unit.dst.replace(/\s+/g, ' ').trim() === unit.src.replace(/\s+/g, ' ').trim()) {
+          const translated = String(result?.text || '').trim();
+          if (unit.src.trim().length > 15 && translated.replace(/\s+/g, ' ').trim() === unit.src.replace(/\s+/g, ' ').trim()) {
             throw new Error('模型返回的译文与原文完全相同。请检查语言方向后重新翻译。');
           }
-          if (unit.dst) {
+          if (translated) {
+            unit.dst = translated;
             unit.status = 'done';
+            if (cache.size >= 500) cache.delete(cache.keys().next().value);
+            cache.set(readSource + '|' + readTarget + '|' + modelSignature + '|' + unit.src, unit.dst);
           } else {
             unit.status = 'error';
             unit.error = '模型没有返回译文，请重试。';
@@ -399,10 +462,12 @@
   }
 
   function cancelTranslate() {
+    stopped = true; clearTimeout(autoTimer);
     const reading = state.reading;
     reading.seq = ++seqCounter;
     reading.busy = false;
-    reading.notice = '已取消等待；晚到的翻译结果会被忽略，不会进入对照区。';
+    reading.units.forEach(unit => { if (unit.status === 'queued') unit.status = 'pending'; });
+    reading.notice = '已停止；尚未发出的段落不会请求，晚到结果会被忽略。已发出的请求可能计费。';
     refresh();
   }
 
@@ -452,7 +517,7 @@
       + (state.selected ? `<option value="selection" ${readScope === 'selection' ? 'selected' : ''}>当前选中内容</option>` : '')
       + `<option value="manual" ${readScope === 'manual' ? 'selected' : ''}>手动输入或粘贴</option>`;
     const empty = readScope === 'manual' && !manualText.trim()
-      ? '<p class="bx-subtle">在上方输入或粘贴要翻译的文字，再点「翻译输入内容」。</p>'
+      ? '<p class="bx-subtle">在上方输入或粘贴要翻译的文字，再点「翻译当前内容」。</p>'
       : !post.text && !articleMeta && !reading.units.length
       ? '<p class="bx-subtle">当前页面没有可翻译的帖文或文章正文。</p>' : '';
     container.innerHTML = `<section class="bx-section">
@@ -464,9 +529,9 @@
           <div class="bx-field"><label for="bx-read-source-language">原文语言</label><select id="bx-read-source-language">${sourceOptions}</select></div>
           <div class="bx-field"><label for="bx-read-target-language">译文语言</label><select id="bx-read-target-language">${targetOptions}</select></div>
         </div>
-        <button type="button" id="bx-read-swap">交换语言方向</button>
-        <p class="bx-subtle">阅读翻译独立于「回复」的写作语言。打开阅读会自动翻译当前内容，可能消耗模型额度。</p>
-        ${readScope === 'manual' ? `<div class="bx-field"><label for="bx-read-manual">输入要翻译的文字</label><textarea id="bx-read-manual" placeholder="在这里输入或粘贴内容">${esc(manualText)}</textarea></div><button type="button" id="bx-read-manual-submit" class="bx-primary bx-wide" ${manualText.trim() ? '' : 'disabled'}>翻译输入内容</button>` : ''}
+        <button type="button" id="bx-translate-now" class="bx-primary" ${readScope === 'manual' && !manualText.trim() ? 'disabled' : ''}>翻译当前内容</button><button type="button" id="bx-stop-translation">停止本次翻译</button><button type="button" id="bx-read-swap">交换语言方向</button>
+        <p class="bx-subtle">阅读翻译独立于「回复」的写作语言。自动模式在详情页翻译正文；可在设置中关闭。选句与粘贴材料需要主动操作。</p>
+        ${readScope === 'manual' ? `<div class="bx-field"><label for="bx-read-manual">输入要翻译的文字</label><textarea id="bx-read-manual" placeholder="在这里输入或粘贴内容">${esc(manualText)}</textarea></div>` : ''}
       </div>
       <blockquote>${esc(preview.slice(0, 850) || placeholder)}</blockquote>
       ${!post.text && articleMeta && !reading.units.length ? '<button id="bx-read-article" class="bx-wide">读取当前 X 文章</button>' : ''}
@@ -478,6 +543,7 @@
         <button id="bx-explain">讲解句子</button>
         <button id="bx-save">存下表达</button>
         ${reading.units.length ? `<button id="bx-retranslate" ${reading.busy ? 'disabled' : ''}>重新翻译</button>` : ''}
+        ${reading.units.some(unit => unit.status === 'error') ? `<button id="bx-retry-failed" ${reading.busy ? 'disabled' : ''}>重试失败段落</button>` : ''}
       </div>
       <div class="bx-field"><label for="bx-word">取词</label><input id="bx-word" placeholder="选中单词后会自动填入" value="${esc(reading.word || (state.selected.split(/\s+/).length === 1 ? state.selected : ''))}"></div>
       ${statusHTML()}
@@ -496,21 +562,26 @@
   }
 
   function wire(container) {
+    container.querySelector('#bx-translate-now').onclick = () => { if (readScope === 'manual' && !manualText.trim()) return; maybeStartAuto(true); };
+    container.querySelector('#bx-stop-translation').onclick = cancelTranslate;
     const currentInputText = () => readScope === 'manual' ? manualText.trim() : state.reading.units.map(unit => unit.src).join('\n\n');
     container.querySelector('#bx-read-scope').onchange = event => {
       readScope = event.target.value;
       state.reading = freshReading();
+      rememberInput();
       refresh();
     };
     container.querySelector('#bx-read-source-language').onchange = event => {
       readSource = event.target.value;
       state.reading = freshReading();
+      rememberInput();
       saveLanguagePair();
       refresh();
     };
     container.querySelector('#bx-read-target-language').onchange = event => {
       readTarget = event.target.value;
       state.reading = freshReading();
+      rememberInput();
       saveLanguagePair();
       refresh();
     };
@@ -519,6 +590,7 @@
       readTarget = readSource === '自动检测' ? (previousTarget === '中文' ? '英语' : '中文') : readSource;
       readSource = previousTarget;
       state.reading = freshReading();
+      rememberInput();
       saveLanguagePair();
       refresh();
     };
@@ -526,17 +598,12 @@
     if (manualInput) manualInput.oninput = () => {
       manualText = manualInput.value;
       state.reading = freshReading();
+      rememberInput();
       container.querySelector('.bx-trans')?.remove();
       container.querySelector('#bx-retranslate')?.remove();
       container.querySelector('blockquote').textContent = manualText.slice(0, 850) || '在这里输入或粘贴内容。';
-      container.querySelector('#bx-read-manual-submit').disabled = !manualText.trim();
+      container.querySelector('#bx-translate-now').disabled = !manualText.trim();
     };
-    container.querySelector('#bx-read-manual-submit')?.addEventListener('click', () => {
-      if (!manualText.trim()) return;
-      state.reading = freshReading();
-      refresh();
-      maybeStartAuto();
-    });
     const wordInput = container.querySelector('#bx-word');
     wordInput.oninput = () => { state.reading.word = wordInput.value; };
     container.querySelector('#bx-lookup').onclick = () => {
@@ -563,17 +630,28 @@
       setPost(article, { reset: true });
       state.selected = '';
       readScope = 'full';
+      rememberInput();
       state.reading = freshReading();
       refresh();
-      maybeStartAuto(); // 手动按钮：立即翻译
+      maybeStartAuto(true); // 手动按钮：立即翻译
     });
     container.querySelector('#bx-retranslate')?.addEventListener('click', () => {
       const reading = state.reading;
       if (reading.busy) return;
-      reading.units.forEach(unit => { unit.status = 'pending'; unit.dst = ''; unit.error = ''; });
+      reading.units.forEach(unit => {
+        cache.delete(readSource + '|' + readTarget + '|' + modelSignature + '|' + unit.src);
+        unit.status = 'pending'; unit.dst = ''; unit.error = '';
+      });
       reading.error = '';
       reading.notice = '';
-      maybeStartAuto();
+      maybeStartAuto(true);
+    });
+    container.querySelector('#bx-retry-failed')?.addEventListener('click', () => {
+      const reading = state.reading;
+      if (reading.busy) return;
+      reading.units.forEach(unit => { if (unit.status === 'error') { unit.status = 'pending'; unit.error = ''; } });
+      reading.error = ''; reading.notice = '';
+      maybeStartAuto(true);
     });
     container.querySelector('#bx-reading-cancel')?.addEventListener('click', cancelTranslate);
   }
@@ -605,25 +683,28 @@
     }, 280);
   });
 
+  BX.on('source-updated', () => { if (!state.sessionLoading) { ensureSource(); scheduleAuto(); } });
+  BX.on('session-ready', () => { restoreInput(); ensureSource(); scheduleAuto(); });
   register({
     id: 'read',
     label: '翻译',
     order: 10,
     init() {
       if (document.body) growthObserver.observe(document.body, { childList: true, subtree: true });
-      send('STORE', { payload: { op: 'get', key: 'readingPrefs' } }).then(prefs => {
+      prefsReady = send('STORE', { payload: { op: 'get', key: 'readingPrefs' } }).then(prefs => {
         if (prefsTouched) return;
         if (!prefs || typeof prefs !== 'object') return;
         const source = ['自动检测', ...LANGUAGES].includes(prefs.source) ? prefs.source : readSource;
         const target = LANGUAGES.includes(prefs.target) ? prefs.target : readTarget;
         if (source === readSource && target === readTarget) return;
         readSource = source; readTarget = target;
-        state.reading = freshReading();
+        if (!window.BXSession?.key) state.reading = freshReading();
         if (BX.element.classList.contains('bx-open') && activeMode() === 'read') refresh();
       }).catch(() => {});
     },
     render(container) { renderRead(container); },
     onPost() {
+      stopped = false; clearTimeout(autoTimer);
       // 切帖：在途翻译由对象/作废号双重校验作废；词典、讲解、选区、词义浮窗都不跨帖。
       readScope = 'full';
       state.reading = freshReading();
@@ -634,19 +715,22 @@
       selectionBar.classList.remove('bx-show');
     },
     onSettings() {
-      // 阅读翻译有独立语言偏好；设置页的目标语言只影响回复写作。
+      const signature = JSON.stringify([state.settings?.modelProvider, state.settings?.providers?.[state.settings?.modelProvider]]);
+      if (modelSignature && signature !== modelSignature) { cache.clear(); state.reading = freshReading(); }
+      modelSignature = signature;
+      if (state.settings?.autoTranslate === false) cancelTranslate(); else { stopped = false; scheduleAuto(); }
     },
     onArticle(article, meta) {
       if (meta.repeat) return;
       const post = state.post;
       if (!post?.url || !meta.key?.startsWith?.('/')) return;
-      if (!post.url.endsWith(meta.key)) return; // 不是当前帖子
+      if (window.BXContext.key(post.url) !== window.BXContext.key(meta.key)) return; // 不是当前帖子
       const next = postFrom(article);
       if (next.text === post.text) return;
       // 当前帖子正文变化（占位→全文等）：旧翻译作废，按新文重译。
       state.post = next;
       state.selected = '';
-      state.reading = freshReading();
+      ensureSource();
       if (readVisible && BX.element.classList.contains('bx-open') && activeMode() === 'read') refresh();
     },
     onEditor() {

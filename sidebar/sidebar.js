@@ -7,7 +7,7 @@
 
   // ---- 共享状态（字段归属见协议 §2；新字段必须带模块前缀） ----
   const state = {
-    mode: 'read', post: null, selected: '', editor: null, busy: false, error: '', notice: '',
+    mode: 'read', post: null, selected: '', readingInput: { scope: 'full', manualText: '', source: '自动检测', target: '中文' }, editor: null, busy: false, error: '', notice: '',
     dictionary: null, explanation: '', practice: null, practiceAnswer: '', practiceFeedback: null,
     revision: '', revisionFeedback: null, idea: '', draft: '', draftNote: '', replyFeedback: null,
     target: '英语', tone: '自然', cards: [], settings: null, insertConfirm: false,
@@ -30,13 +30,13 @@
     return {
       text: getTweetText(article),
       author: (article.querySelector('[data-testid="User-Name"]')?.innerText || '').split('\n')[0].slice(0, 80),
-      url: permalink ? new URL(permalink.getAttribute('href'), location.origin).href : location.href
+      url: window.BXContext?.postUrl(article) || (permalink ? new URL(permalink.getAttribute('href'), location.origin).href : location.href)
     };
   };
   const longArticleOnPage = () => {
     const node = document.querySelector('[data-testid="longformRichTextComponent"], [data-testid="articleBody"], [data-testid="article-content"]');
     const text = node?.innerText?.trim() || '';
-    return text ? { text, author: document.querySelector('main h1')?.innerText?.slice(0, 80) || 'X 文章', url: location.href } : null;
+    return text ? { text, author: document.querySelector('main h1')?.innerText?.slice(0, 80) || 'X 文章', url: window.BXContext?.canonical(location.href) || location.href } : null;
   };
   const isEditor = node => node?.matches?.('[contenteditable="true"][role="textbox"], [data-testid="tweetTextarea_0"]');
   const EDITOR_SELECTOR = '[data-testid="tweetTextarea_0"][contenteditable="true"], [contenteditable="true"][role="textbox"]';
@@ -53,10 +53,11 @@
   const sidebar = document.createElement('aside');
   sidebar.id = 'bx-sidebar';
   sidebar.setAttribute('aria-label', '巴别塔（回译）工作台');
-  sidebar.innerHTML = `<div class="bx-head"><div class="bx-brand"><span class="bx-mark">回</span><span>巴别塔（回译）<small>在这里读懂，也在这里表达</small></span></div><button id="bx-close" aria-label="关闭侧栏">×</button></div><div class="bx-tabs"></div><div id="bx-body"></div><div class="bx-foot">打开翻译页会自动调用所选模型，可能消耗额度；插件不会自动发布。</div>`;
+  sidebar.innerHTML = `<div class="bx-head"><div class="bx-brand"><span class="bx-mark">回</span><span>巴别塔（回译）<small>在这里读懂，也在这里表达</small></span></div><button id="bx-settings" aria-label="打开设置">设置</button><button id="bx-close" aria-label="关闭侧栏">×</button></div><div class="bx-tabs"></div><div id="bx-body"></div><div class="bx-foot"><span id="bx-save-status"></span><br>自动模式下进入详情会调用模型；可在设置中关闭。插件不会自动发布。</div>`;
   document.documentElement.appendChild(sidebar);
   const body = sidebar.querySelector('#bx-body');
   const tabsEl = sidebar.querySelector('.bx-tabs');
+  sidebar.querySelector('#bx-settings').onclick = () => send('OPEN_SETTINGS').catch(error => { state.error = error.message; refresh(); });
   sidebar.querySelector('#bx-close').onclick = () => close();
   body.addEventListener('click', event => { if (event.target?.id === 'bx-cancel-request') cancel(); });
   sidebar.addEventListener('compositionstart', event => { if (event.target?.matches?.('textarea, input')) { state.composing = true; state.pendingRender = false; } });
@@ -110,6 +111,7 @@
     document.documentElement.classList.remove('bx-sidebar-on');
   }
   function refresh() {
+    queueMicrotask(() => window.BXSession?.save());
     // IME 组合输入期间不重建正在输入的编辑框（审计验收），推迟到 compositionend。
     if (state.composing) { state.pendingRender = true; return; }
     const mod = activeModule();
@@ -118,7 +120,7 @@
     renderTabs();
     const focusId = document.activeElement?.id && sidebar.contains(document.activeElement) ? document.activeElement.id : '';
     const caret = focusId && document.activeElement.selectionStart != null ? document.activeElement.selectionStart : null;
-    try { mod.render(body); } catch (error) {
+    try { mod.render(body); body.inert = Boolean(state.sessionLoading); } catch (error) {
       body.innerHTML = `<section class="bx-section"><div class="bx-status bx-error" role="alert">${esc(error.message || '模块渲染失败。')}</div></section>`;
     }
     if (focusId) {
@@ -130,13 +132,18 @@
     }
   }
 
+  let settingsReady = Promise.resolve();
+  function awaitSettings(promise) { settingsReady = promise; }
+
   // ---- 请求序号：取消/切帖后旧序号的结果一律丢弃，绝不覆盖新输入 ----
   async function busy(work) {
+    if (state.busy) return;
+    await Promise.all([settingsReady, window.BXSession?.ready]);
     if (state.busy) return;
     const seq = ++state.reqSeq;
     state.busy = true; state.error = ''; state.notice = ''; state.insertConfirm = false; refresh();
     try { await work(seq); } catch (error) { if (seq === state.reqSeq) state.error = error.message || '请求失败，请重试。'; }
-    if (seq === state.reqSeq) { state.busy = false; refresh(); }
+    if (seq === state.reqSeq) { state.busy = false; refresh(); window.BXSession?.save(); }
   }
   function cancel() {
     state.reqSeq++;
@@ -172,33 +179,19 @@
 
   // ---- 回复对象（切帖语义） ----
   function openForPost(article, tabId) {
-    const next = postFrom(article);
-    const prev = state.post;
-    const changed = state.post?.url !== next.url || state.post?.text !== next.text;
-    if (changed) {
-      // 切换帖子：作废在途请求与插入绑定，旧结果/旧稿不得落到新对象上（与旧 openArticle 语义一致）。
-      state.reqSeq++;
-      state.busy = false;
-      state.post = next;
-      for (const mod of registry) { try { mod.onPost?.(next, prev); } catch (error) { console.error('[bx] onPost', mod.id, error); } }
-      emit('post-change', { post: next });
-    } else {
-      state.post = next;
-    }
-    state.error = '';
-    open(tabId);
+    setPost(postFrom(article), { reset: true }); open(tabId);
   }
-  function setPost(post, { reset = false, force = false } = {}) {
-    const prev = state.post;
-    const changed = force || prev?.url !== post?.url || prev?.text !== post?.text;
-    state.post = post;
-    if (changed && reset) {
-      state.reqSeq++;
-      state.busy = false;
-      state.editor = null;
-      for (const mod of registry) { try { mod.onPost?.(post, prev); } catch (error) { console.error('[bx] onPost', mod.id, error); } }
-      emit('post-change', { post });
-    }
+  function setPost(post, { reset = false, selected, readingInput } = {}) {
+    const apply = next => {
+      const prev = state.post; state.post = next;
+      if (reset) {
+        state.reqSeq++; state.busy = false; state.editor = null; state.binding = null; state.insertConfirm = false;
+        for (const mod of registry) { try { mod.onPost?.(next, prev); } catch (error) { console.error('[bx] onPost', error); } }
+        emit('post-change', { post: next });
+      }
+    };
+    const edits = selected === undefined && readingInput === undefined ? undefined : { ...(selected === undefined ? {} : { selected }), ...(readingInput === undefined ? {} : { readingInput }) };
+    if (window.BXSession) window.BXSession.switchTo(post, apply, edits); else { apply(post); if (edits) Object.assign(state, edits); }
   }
 
   // ---- content.js 回调 ----
@@ -230,6 +223,6 @@
     util: { esc, send, getTweetText, postFrom, longArticleOnPage, isEditor, visibleInPage, visibleEditors, ensureMaterialLimit },
     register, refresh, open, close, openForPost, setPost,
     busy, cancel, statusHTML, feedbackHTML, saveCard,
-    notifyArticle, notifyEditor, applySettings, on, emit
+    notifyArticle, notifyEditor, applySettings, awaitSettings, on, emit
   });
 })();

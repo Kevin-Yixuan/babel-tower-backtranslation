@@ -49,6 +49,7 @@ test('base url normalization and permission origins', () => {
   assert.throws(() => normalizeBaseUrl('not a url'), /格式不正确/);
   assert.equal(joinUrl('https://api.deepseek.com/v1/', '/chat/completions'), 'https://api.deepseek.com/v1/chat/completions');
   assert.equal(permissionOrigin('https://open.bigmodel.cn/api/paas/v4'), 'https://open.bigmodel.cn/*');
+  assert.equal(permissionOrigin('http://127.0.0.1:11434'), 'http://127.0.0.1/*');
 });
 
 test('four providers are configured and chat requests carry schema instructions', () => {

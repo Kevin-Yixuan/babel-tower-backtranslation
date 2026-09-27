@@ -54,7 +54,7 @@ const path = require('node:path');
   const extensionId = new URL(worker.url()).host;
   const popup = await context.newPage();
   await popup.setViewportSize({ width: 372, height: 620 });
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await popup.goto(`chrome-extension://${extensionId}/options.html`);
   await popup.locator('#provider-key').waitFor();
   assert(!(await popup.locator('#status').innerText()).includes('此操作只允许'));
   await popup.screenshot({ path: path.join(root, 'tests', 'popup-preview.png') });

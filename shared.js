@@ -25,6 +25,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   },
   model: 'gpt-6-luna', // legacy field, migrated into providers.openai.model on first load
   targetLanguage: '英语',
+  agentProvider: 'ollama',
+  agentBaseUrl: 'http://127.0.0.1:11434',
+  agentModel: 'qwen3:8b',
   filterEnabled: false,
   filterRules: [],
   filterThreshold: 0.82,
@@ -55,6 +58,7 @@ export function normalizeBaseUrl(raw) {
     error.code = 'bad_url';
     throw error;
   }
+  if (url.username || url.password || url.search || url.hash) throw new Error('API 地址不能包含账号、密码、查询参数或片段。');
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
   if (url.protocol !== 'https:' && !(local && url.protocol === 'http:')) {
     const error = new Error('Base URL 必须使用 https://（本地调试可用 http://localhost）。');
@@ -75,7 +79,8 @@ export function joinUrl(baseUrl, path) {
 
 export function permissionOrigin(raw) {
   const url = new URL(normalizeBaseUrl(raw));
-  return `${url.protocol}//${url.host}/*`;
+  // Chrome match patterns do not accept ports; request the host, validate ports in transport.
+  return `${url.protocol}//${url.hostname}/*`;
 }
 
 export function buildChatRequest({ instructions, input, schema = null, maxOutputTokens = 1200, provider = null }) {

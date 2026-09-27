@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>自由写作台 · 回译 X</title>
+  <link rel="stylesheet" href="desk.css">
+  <script type="module" src="desk.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="logo">回</span><div><b>自由写作台</b><small>Markdown 文稿 + 开源 Agent</small></div></div>
+      <div class="document-title"><input id="doc-title" value="未命名文稿" maxlength="100" aria-label="文稿标题"><span id="save-state">已保存</span></div>
+      <div class="top-actions">
+        <a href="../options.html" target="_blank" rel="noopener">Agent 设置</a><button id="copy-markdown">复制 Markdown</button>
+        <button id="new-document" class="primary">新建文稿</button>
+      </div>
+    </header>
+
+    <aside class="library" aria-label="文稿库">
+      <div class="aside-title"><div><small>本地文稿</small><b>我的写作</b></div><button id="quick-note" title="新建笔记">＋</button></div>
+      <div id="document-list" class="document-list"></div>
+      <div class="library-footer"><span>自动保存在当前浏览器</span><button id="delete-document">删除当前文稿</button></div>
+    </aside>
+
+    <main class="workspace">
+      <div class="workspace-toolbar">
+        <div class="view-tabs" role="tablist">
+          <button data-view="write" class="active">编辑</button>
+          <button data-view="split">分栏</button>
+          <button data-view="preview">预览</button>
+        </div>
+        <div class="document-meta"><span id="word-count">0 字</span><span id="context-count">0 条上下文</span></div>
+      </div>
+      <div id="editor-layout" class="editor-layout view-write">
+        <section class="editor-pane" aria-label="Markdown 编辑器">
+          <textarea id="markdown-editor" spellcheck="true" placeholder="# 从一个明确判断开始
+
+写下你的观点，或把右侧 Agent 的结果写入这里……"></textarea>
+        </section>
+        <section class="preview-pane" aria-label="Markdown 预览">
+          <article id="markdown-preview" class="markdown-body"></article>
+        </section>
+      </div>
+    </main>
+
+    <aside class="agent-panel" aria-label="写作 Agent">
+      <div class="agent-head">
+        <div><small>OPEN AGENT</small><h1>写作协作者</h1></div>
+        <button id="agent-reset">新会话</button>
+      </div>
+      <div id="agent-runtime" class="runtime-card"><span class="runtime-dot"></span><div><b>正在检测…</b><small>连接开源模型运行时</small></div><button id="agent-refresh">↻</button></div>
+
+      <section class="context-section">
+        <div class="section-title"><b>上下文</b><span>你决定发送什么</span></div>
+        <label class="context-row"><input id="context-document" type="checkbox"><span><b>当前文稿</b><small id="document-context-detail">全文 · 0 字</small></span></label>
+        <label class="context-row"><input id="context-selection" type="checkbox"><span><b>当前选区</b><small id="selection-context-detail">未选择文字</small></span></label>
+        <label class="context-row"><input id="context-notes" type="checkbox"><span><b>临时要求</b><small>固定风格、事实边界或读者</small></span></label>
+        <textarea id="context-notes-text" class="context-notes" placeholder="例如：第一人称；不写教程；不新增未经核实的数据。" hidden></textarea>
+      </section>
+
+      <div class="prompt-presets">
+        <button data-context="document" data-prompt="先给出最核心的判断，再把全文整理成结构清楚、没有空话的 Markdown 文稿。保留我的观点，不新增事实。">整理全文</button>
+        <button data-context="selection" data-prompt="只重写我当前选中的部分：结论前置，删掉自我消解和重复表达。直接给替换文本。">改写选区</button>
+        <button data-context="document" data-prompt="继续写下一段。承接当前论点，但不要重复上一段，直接给可插入的正文。">续写一段</button>
+        <button data-context="document" data-prompt="审阅当前文稿，指出最影响表达的 3 个具体问题，并给出逐句修改方案。不要泛泛而谈。">具体审稿</button>
+      </div>
+
+      <div id="agent-thread" class="agent-thread"><div class="thread-empty"><b>先写，再让 Agent 进入。</b><span>发送指令、勾选材料及本会话历史，不会发布任何内容。</span></div></div>
+
+      <div class="composer">
+        <textarea id="agent-prompt" placeholder="告诉 Agent 这一步要做什么……"></textarea>
+        <div class="composer-actions"><span id="agent-hint">结果返回后可插入、替换或追加</span><button id="agent-send" class="primary" disabled>发送</button></div>
+      </div>
+      <div id="agent-output-actions" class="output-actions" hidden>
+        <button data-apply="replace-selection">替换选区</button>
+        <button data-apply="cursor">插入光标</button>
+        <button data-apply="append">追加文末</button>
+      </div>
+    </aside>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
