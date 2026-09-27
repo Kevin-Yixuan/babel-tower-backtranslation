@@ -152,6 +152,17 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       assert.equal(await worker.evaluate(() => __ux.calls.filter(x => x.input.includes('UNSENT_7301')).length), 0);
     });
 
+    await test('navigation: leaving a post detaches its draft session', async () => {
+      const page = await open(article('7311', A), 'alpha/status/7311');
+      await page.locator('#p7311 .bx-entry-reply').click(); await ready(page);
+      await page.locator('#bx-draft').fill('PRIVATE_DRAFT_7311');
+      await saved(page);
+      await page.evaluate(() => history.pushState({}, '', '/home'));
+      await page.waitForFunction(() => !document.querySelector('#bx-draft')?.value?.includes('PRIVATE_DRAFT_7311'));
+      await page.evaluate(() => history.pushState({}, '', '/alpha/status/7311'));
+      await page.waitForFunction(() => document.querySelector('#bx-draft')?.value === 'PRIVATE_DRAFT_7311');
+    });
+
     await test('rapid-selection: latest A-B-A intent survives slow storage', async () => {
       await seed([{ key: 'post:7351', data: { selected: 'OLD A SELECTION' } }, { key: 'post:7352', data: { selected: 'OLD B SELECTION' } }]);
       // Delay delivery of readonly IDB results, keeping actual requests and records.

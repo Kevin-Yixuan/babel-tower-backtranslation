@@ -191,7 +191,7 @@
       }
     };
     const edits = selected === undefined && readingInput === undefined ? undefined : { ...(selected === undefined ? {} : { selected }), ...(readingInput === undefined ? {} : { readingInput }) };
-    if (window.BXSession && post) window.BXSession.switchTo(post, apply, edits); else { apply(post); if (edits) Object.assign(state, edits); }
+    if (window.BXSession) window.BXSession.switchTo(post, apply, edits); else { apply(post); if (edits) Object.assign(state, edits); }
   }
 
   // ---- content.js 回调 ----

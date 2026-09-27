@@ -46,11 +46,14 @@
   let observedHref = location.href;
   function reconcileLocation() {
     if (location.href === observedHref) return;
+    const previousKey = window.BXContext.key(observedHref);
     observedHref = location.href;
     // X navigates without reloading content scripts. The prior post, selection, editor,
     // and in-flight answers must not be reused on the next route.
     const key = window.BXContext.key(location.href);
-    if (key) window.BX.setPost({ url: window.BXContext.canonical(location.href), text: '', author: '' }, { reset: true });
+    if (key !== previousKey) {
+      window.BX.setPost(key ? { url: window.BXContext.canonical(location.href), text: '', author: '' } : null, { reset: true });
+    }
     if (window.BX.element.classList.contains('bx-open')) window.BX.refresh();
   }
   function scan() {
@@ -60,7 +63,12 @@
       const textNode = article.querySelector('[data-testid="tweetText"]');
       if (!textNode) return;
       const parsed = window.BX.util.postFrom(article);
-      if (routeKey && window.BXContext.key(parsed.url) === routeKey) window.BX.setPost(parsed, { reset: true });
+      // A DOM rescan is not a new user selection. onArticle handles body growth;
+      // avoid repeatedly entering the session switch path for an unchanged post.
+      if (routeKey && window.BXContext.key(parsed.url) === routeKey
+        && window.BXContext.key(window.BX.state.post?.url) !== routeKey) {
+        window.BX.setPost(parsed, { reset: true });
+      }
       const key = postKey(article);
       const sig = postTextSignature(article);
       if (article.dataset.bxReady) {
