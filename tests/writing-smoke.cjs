@@ -60,7 +60,10 @@ const path = require('node:path');
   await popup.waitForFunction(() => document.querySelector('#model-provider')?.options.length > 0, null, { timeout: 15000 });
   await popup.locator('#provider-key').fill('test-placeholder-key');
   await popup.locator('#save-main').click();
-  await popup.locator('#status').getByText('已保存').waitFor({ timeout: 8000 });
+  // 不等 #status「已保存」：MDX 词典面板挂载后的异步 refresh（IndexedDB）完成时会把
+  // #status 覆盖成词典文案，CI 冷启动下正好发生在保存之后，断言会扑空。
+  // #settings-dirty-status 只由 setDirty 写入（保存成功 → 「所有修改已保存。」），面板不碰。
+  await popup.locator('#settings-dirty-status').getByText('所有修改已保存').waitFor({ state: 'attached', timeout: 15000 });
 
   const page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));

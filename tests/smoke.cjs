@@ -65,7 +65,8 @@ const path = require('node:path');
   await popup.locator('[data-rule-text="0"]').fill('折叠只为引战、没有实质信息的帖子');
   assert.equal(await popup.locator('.rule').count(), 1);
   await popup.locator('#save-filter').click();
-  await popup.locator('#status').getByText('已保存').waitFor({ timeout: 8000 });
+  // 不等 #status「已保存」（MDX 面板异步 refresh 会覆盖 #status），改用 setDirty 专属的状态行
+  await popup.locator('#settings-dirty-status').getByText('所有修改已保存').waitFor({ state: 'attached', timeout: 15000 });
   await popup.locator('[data-tab="dictionary"]').click();
   await popup.locator('#glossary-file').setInputFiles({ name: 'words.tsv', mimeType: 'text/tab-separated-values', buffer: Buffer.from('writing\t写作\n') });
   await popup.locator('#glossary-count').getByText('已导入 1 个词条').waitFor();
