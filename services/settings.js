@@ -41,6 +41,11 @@ export function normalizeSettings(stored = {}) {
   const result = { ...DEFAULT_SETTINGS, ...source, schemaVersion: 2, providers,
     modelProvider: Object.hasOwn(providers, source.modelProvider) ? source.modelProvider : 'openai',
     autoTranslate: source.autoTranslate !== false, hoverLookup: source.hoverLookup !== false };
+  if (result.agentProvider !== 'pi') {
+    result.agentProvider = 'pi';
+    result.agentBaseUrl = DEFAULT_SETTINGS.agentBaseUrl;
+    result.agentModel = '';
+  }
   // 密钥永远不放进 settings 对象：即使旧数据/归档把密钥混进了 settings，导出与展示也不携带
   for (const secret of ['apiKeys', 'apiKey', 'openaiKey', 'jevKey', 'agentKey', 'key']) delete result[secret];
   return result;
@@ -97,9 +102,9 @@ export async function saveSettings(payload, storage) {
   const previous = await readSettings(storage);
   const settings = {
     schemaVersion: 2,
-    agentProvider: payload.agentProvider ?? previous.agentProvider,
-    agentBaseUrl: safeAgentEndpoint(payload.agentProvider ?? previous.agentProvider, payload.agentBaseUrl ?? previous.agentBaseUrl),
-    agentModel: clean(payload.agentModel ?? previous.agentModel, 120) || DEFAULT_SETTINGS.agentModel,
+    agentProvider: 'pi',
+    agentBaseUrl: safeAgentEndpoint('pi', payload.agentBaseUrl ?? previous.agentBaseUrl),
+    agentModel: clean(payload.agentModel ?? previous.agentModel, 120),
     autoTranslate: payload.autoTranslate ?? previous.autoTranslate,
     hoverLookup: payload.hoverLookup ?? previous.hoverLookup,
     modelProvider: payload.modelProvider || previous.modelProvider,

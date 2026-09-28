@@ -41,7 +41,7 @@
       if(prompt===instruction) prompt='';
     });
     body.querySelector('#bx-agent-reset').onclick=()=>BX.busy(async seq=>{
-      if(!confirm('清除本会话记录？回复草稿保持不变。OpenCode 远端记录也将请求删除。')) return;
+      if(!confirm('清除本会话记录？回复草稿保持不变。')) return;
       await send('RESET_AGENT_SESSION',{sessionId});
       if(seq===state.reqSeq) {messages=[];prompt='';}
     });

@@ -2,7 +2,7 @@ import { sessionOp } from './sessions.js';
 import { normalizeSettings, validateProviders } from './settings.js';
 const arrays = ['writingDrafts', 'cards', 'growthMemories', 'savedPhrases'];
 const objects = ['growthSettings', 'discoveryPrefs', 'readingPrefs', 'glossary', 'documents', 'agentSessions'];
-const keys = ['settings', 'initPrompt', ...arrays, ...objects];
+const keys = ['settings', 'initPrompt', 'documentFolders', ...arrays, ...objects];
 
 export async function exportBackup() {
   const stored = await chrome.storage.local.get(keys);
@@ -15,6 +15,7 @@ export function validateBackup(archive) {
   if (archive?.format !== 'babel-tower-backup' || archive.version !== 1 || !archive.storage || !Array.isArray(archive.sessions)) throw new Error('不是支持的巴别塔备份文件。');
   if (JSON.stringify(archive).length > 40_000_000) throw new Error('备份过大，请拆分导入。');
   for (const name of arrays) if (archive.storage[name] !== undefined && (!Array.isArray(archive.storage[name]) || archive.storage[name].some(x => !x || typeof x !== 'object' || Array.isArray(x)))) throw new Error(name + ' 数据格式不正确。');
+  if (archive.storage.documentFolders !== undefined && (!Array.isArray(archive.storage.documentFolders) || archive.storage.documentFolders.some(x => typeof x !== 'string' || x.length > 100))) throw new Error('资料文件夹格式不正确。');
   for (const name of objects) if (archive.storage[name] !== undefined && (!archive.storage[name] || typeof archive.storage[name] !== 'object' || Array.isArray(archive.storage[name]))) throw new Error(name + ' 数据格式不正确。');
   if (archive.storage.initPrompt !== undefined && typeof archive.storage.initPrompt !== 'string') throw new Error('提示词数据不正确。');
   if (archive.storage.settings) validateProviders(normalizeSettings(archive.storage.settings).providers);
@@ -42,6 +43,9 @@ async function planImport(archive) {
     for (const field of Object.keys(archive.storage[name])) {
       if (old[name] && Object.hasOwn(old[name], field)) skipped++; else imported++;
     }
+  }
+  for (const folder of archive.storage.documentFolders || []) {
+    if ((old.documentFolders || []).includes(folder)) skipped++; else imported++;
   }
   if (archive.storage.initPrompt !== undefined) { if (old.initPrompt) skipped++; else imported++; }
   if (archive.storage.settings) {
@@ -86,6 +90,7 @@ export async function importBackup(archive) {
     next[name] = merged;
   }
   for (const name of objects) if (archive.storage[name]) next[name] = { ...archive.storage[name], ...(old[name] || {}) };
+  if (archive.storage.documentFolders) next.documentFolders = [...new Set([...(old.documentFolders || []), ...archive.storage.documentFolders])];
   if (!old.initPrompt && archive.storage.initPrompt) next.initPrompt = archive.storage.initPrompt;
   if (archive.storage.settings) {
     const incoming = normalizeSettings(archive.storage.settings), current = normalizeSettings(old.settings || {});

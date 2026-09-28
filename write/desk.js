@@ -13,6 +13,7 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, character =>
 const state = {
   document: null,
   documents: [],
+  folders: ['我的文章', '参考文章'],
   agentSessionId: crypto.randomUUID(),
   agentMessages: [],
   lastAnswer: '',
@@ -75,7 +76,7 @@ function scheduleSave() {
 async function saveCurrent() {
   if (!state.document) return;
   clearTimeout(state.saveTimer);
-  const payload = { id: state.document.id, title: currentTitle(), content: currentContent() };
+  const payload = { id: state.document.id, title: currentTitle(), content: currentContent(), folder: state.document.folder, kind: state.document.kind, sourceUrl: state.document.sourceUrl };
   const saved = await send('SAVE_DOCUMENT', { payload });
   // A late save must not overwrite edits made during storage I/O or another document.
   if (state.document?.id === saved.id) {
@@ -92,7 +93,14 @@ async function loadDocumentList(render = true) {
 
 function renderDocumentList() {
   const list = $('#document-list');
-  list.innerHTML = state.documents.length ? state.documents.map(document => `<button class="document-card ${document.id === state.document?.id ? 'active' : ''}" data-document-id="${escapeHTML(document.id)}"><b>${escapeHTML(document.title)}</b><span>${escapeHTML(document.excerpt || '空白文稿')}</span><small>${new Date(document.updatedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} · ${document.size || 0} 字符</small></button>`).join('') : '<div class="library-empty">还没有文稿。点击右上角“新建文稿”开始。</div>';
+  const query = $('#library-search').value.trim().toLowerCase();
+  const rows = state.documents.filter(item => !query || `${item.title} ${item.excerpt} ${item.folder}`.toLowerCase().includes(query));
+  const folders = [...new Set([...state.folders, ...rows.map(item => item.folder || (item.kind === 'reference' ? '参考文章' : '我的文章'))])];
+  list.innerHTML = folders.map(folder => {
+    const items = rows.filter(item => (item.folder || (item.kind === 'reference' ? '参考文章' : '我的文章')) === folder);
+    if (query && !items.length) return '';
+    return `<details class="folder-group" open><summary>▸ ${escapeHTML(folder)} <small>${items.length}</small></summary>${items.map(document => `<button class="document-card ${document.id === state.document?.id ? 'active' : ''}" data-document-id="${escapeHTML(document.id)}"><b>${document.kind === 'reference' ? '▤ ' : '✎ '}${escapeHTML(document.title)}</b><span>${escapeHTML(document.excerpt || '空白文稿')}</span><small>${new Date(document.updatedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric' })} · ${document.size || 0} 字符</small></button>`).join('')}</details>`;
+  }).join('') || '<div class="library-empty">没有找到文稿。</div>';
   list.querySelectorAll('[data-document-id]').forEach(button => button.onclick = () => openDocument(button.dataset.documentId));
 }
 
@@ -127,10 +135,10 @@ async function openDocument(id) {
   return true;
 }
 
-async function createDocument(template = '') {
+async function createDocument(template = '', kind = 'draft') {
   if (state.busy) return toast('请等待本轮 Agent 完成后新建文稿。', true);
   if (state.document) await saveCurrent();
-  const document = await send('SAVE_DOCUMENT', { payload: { title: template ? '快速笔记' : '未命名文稿', content: template } });
+  const document = await send('SAVE_DOCUMENT', { payload: { title: kind === 'reference' ? '新参考文章' : template ? '快速笔记' : '未命名文稿', content: template, kind, folder: kind === 'reference' ? '参考文章' : '我的文章' } });
   state.document = document;
   $('#doc-title').value = document.title;
   $('#markdown-editor').value = document.content;
@@ -264,10 +272,47 @@ $('#markdown-editor').addEventListener('mouseup', updateSelectionMeta);
 $('#doc-title').addEventListener('input', scheduleSave);
 $('#new-document').onclick = () => createDocument();
 $('#quick-note').onclick = () => createDocument('# 快速笔记\n\n');
+$('#new-reference').onclick = async () => {
+  try {
+    const content = await navigator.clipboard.readText();
+    if (!content.trim()) return toast('剪贴板没有文章文字。', true);
+    await createDocument(content, 'reference');
+    toast('参考文章已保存，可以移动到文件夹。');
+  } catch (error) { toast(`读取剪贴板失败：${error.message}`, true); }
+};
+$('#new-folder').onclick = async () => {
+  const name = window.prompt('文件夹名称（可用 / 建立层级）')?.trim();
+  if (!name || name.length > 100 || name.includes('..')) return;
+  state.folders = [...new Set([...state.folders, name])];
+  await chrome.storage.local.set({ documentFolders: state.folders });
+  renderDocumentList();
+};
+$('#move-document').onclick = async () => {
+  if (!state.document) return;
+  const folder = window.prompt('移动到哪个文件夹？', state.document.folder || '我的文章')?.trim();
+  if (!folder || folder.length > 100 || folder.includes('..')) return;
+  state.document.folder = folder;
+  state.folders = [...new Set([...state.folders, folder])];
+  await chrome.storage.local.set({ documentFolders: state.folders });
+  await saveCurrent();
+  renderDocumentList();
+};
+$('#library-search').addEventListener('input', renderDocumentList);
 $('#delete-document').onclick = deleteCurrentDocument;
 $('#copy-markdown').onclick = async () => {
   try { await navigator.clipboard.writeText(currentContent()); toast('Markdown 已复制。'); }
   catch { toast('复制失败，请在编辑区手动全选。', true); }
+};
+$('#copy-rich-x').onclick = async () => {
+  try {
+    const html = `<article>${renderMarkdown(currentContent())}</article>`;
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([currentContent()], { type: 'text/plain' })
+    })]);
+    window.open('https://x.com/compose/articles', '_blank', 'noopener');
+    toast('已复制富文本；在 X 文章编辑器中粘贴并检查排版。');
+  } catch (error) { toast(`复制排版失败：${error.message}`, true); }
 };
 document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => setView(button.dataset.view));
 ['#context-document', '#context-selection', '#context-notes'].forEach(selector => $(selector).onchange = () => {
@@ -303,6 +348,7 @@ chrome.runtime.onMessage?.addListener((message, sender, respond) => {
 });
 
 try {
+  state.folders = [...new Set([...state.folders, ...((await chrome.storage.local.get('documentFolders')).documentFolders || [])])];
   await loadDocumentList();
   const requested = new URLSearchParams(location.search).get('doc');
   let opened = false;

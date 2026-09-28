@@ -15,15 +15,13 @@ export function clampAgentHistory(messages, maxMessages = 16, maxChars = 18_000)
 }
 
 export function safeAgentEndpoint(provider, rawUrl) {
-  const fallback = provider === 'opencode' ? 'http://127.0.0.1:4096' : 'http://127.0.0.1:11434';
-  let parsed;
-  try { parsed = new URL(String(rawUrl || fallback)); } catch { throw new Error('Agent 地址格式不正确。'); }
-  const allowed = provider === 'opencode'
-    ? ['http://127.0.0.1:4096', 'http://localhost:4096']
-    : ['http://127.0.0.1:11434', 'http://localhost:11434', 'https://ollama.com'];
-  const origin = `${parsed.protocol}//${parsed.host}`;
-  if (!['ollama', 'opencode'].includes(provider) || !allowed.includes(origin) || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/') throw new Error('Agent 地址仅允许默认本机端口或 https://ollama.com。');
-  return origin;
+  if (provider === 'pi') {
+    const parsed = new URL(String(rawUrl || 'http://127.0.0.1:4097'));
+    if (!['http://127.0.0.1:4097', 'http://localhost:4097'].includes(parsed.origin)
+      || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/') throw new Error('Pi 地址只能是本机 4097 端口。');
+    return parsed.origin;
+  }
+  throw new Error('只支持 Pi 本机桥接服务。');
 }
 
 export function agentContextBlock(items) {
@@ -45,6 +43,9 @@ export function normalizeDocument(payload, previous = {}) {
     id: String(payload?.id || previous.id || crypto.randomUUID()).slice(0, 80),
     title: String(payload?.title || previous.title || firstHeading || '未命名文稿').trim().slice(0, 100),
     content,
+    folder: String(payload?.folder ?? previous.folder ?? (payload?.kind === 'reference' ? '参考文章' : '我的文章')).trim().slice(0, 100) || '我的文章',
+    kind: payload?.kind === 'reference' || previous.kind === 'reference' ? 'reference' : 'draft',
+    sourceUrl: String(payload?.sourceUrl ?? previous.sourceUrl ?? '').trim().slice(0, 2000),
     createdAt: previous.createdAt || now,
     updatedAt: now
   };

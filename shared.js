@@ -25,9 +25,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   },
   model: 'gpt-6-luna', // legacy field, migrated into providers.openai.model on first load
   targetLanguage: '英语',
-  agentProvider: 'ollama',
-  agentBaseUrl: 'http://127.0.0.1:11434',
-  agentModel: 'qwen3:8b',
+  agentProvider: 'pi',
+  agentBaseUrl: 'http://127.0.0.1:4097',
+  agentModel: '',
   filterEnabled: false,
   filterRules: [],
   filterThreshold: 0.82,

@@ -13,19 +13,22 @@
       <div class="brand"><span class="logo">回</span><div><b>自由写作台</b><small>Markdown 文稿 + 开源 Agent</small></div></div>
       <div class="document-title"><input id="doc-title" value="未命名文稿" maxlength="100" aria-label="文稿标题"><span id="save-state">已保存</span></div>
       <div class="top-actions">
-        <a href="../options.html" target="_blank" rel="noopener">Agent 设置</a><button id="copy-markdown">复制 Markdown</button>
+        <a href="../options.html" target="_blank" rel="noopener">Pi 设置</a><button id="copy-markdown">复制 Markdown</button><button id="copy-rich-x">排版到 X 文章</button>
         <button id="new-document" class="primary">新建文稿</button>
       </div>
     </header>
 
     <aside class="library" aria-label="文稿库">
-      <div class="aside-title"><div><small>本地文稿</small><b>我的写作</b></div><button id="quick-note" title="新建笔记">＋</button></div>
+      <div class="aside-title"><div><small>资料库</small><b>我的写作</b></div><button id="quick-note" title="新建笔记">＋</button></div>
+      <div class="library-tools"><button id="new-folder">新建文件夹</button><button id="new-reference">保存参考</button></div>
+      <input id="library-search" class="library-search" type="search" placeholder="搜索文章与参考">
       <div id="document-list" class="document-list"></div>
       <div class="library-footer"><span>自动保存在当前浏览器</span><button id="delete-document">删除当前文稿</button></div>
     </aside>
 
     <main class="workspace">
       <div class="workspace-toolbar">
+        <button id="move-document" title="移动当前文稿到文件夹">移动到文件夹</button>
         <div class="view-tabs" role="tablist">
           <button data-view="write" class="active">编辑</button>
           <button data-view="split">分栏</button>
