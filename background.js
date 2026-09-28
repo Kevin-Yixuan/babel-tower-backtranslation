@@ -1,4 +1,4 @@
-import { agentOp } from './services/agent.js';
+import { agentOp } from './services/pi-agent.js';
 import { exportBackup, importBackup, previewBackup } from './services/backup.js';
 import {
   modelFetch, readSettings, readApiKeys,

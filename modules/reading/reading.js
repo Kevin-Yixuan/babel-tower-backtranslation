@@ -542,6 +542,7 @@
         <button id="bx-lookup" class="bx-primary">查词</button>
         <button id="bx-explain">讲解句子</button>
         <button id="bx-save">存下表达</button>
+        <button id="bx-save-reference">保存全文到写作台</button>
         ${reading.units.length ? `<button id="bx-retranslate" ${reading.busy ? 'disabled' : ''}>重新翻译</button>` : ''}
         ${reading.units.some(unit => unit.status === 'error') ? `<button id="bx-retry-failed" ${reading.busy ? 'disabled' : ''}>重试失败段落</button>` : ''}
       </div>
@@ -623,6 +624,16 @@
       state.dictionary = null;
     });
     container.querySelector('#bx-save').onclick = () => saveCurrent(currentInputText(), 'sentence');
+    container.querySelector('#bx-save-reference').onclick = async () => {
+      const source = longArticleOnPage() || state.post;
+      if (!source?.text?.trim()) { state.error = '当前页面没有可保存的正文。'; refresh(); return; }
+      try {
+        const title = source.text.trim().split('\n').find(Boolean)?.slice(0, 80) || 'X 参考文章';
+        const document = await send('SAVE_DOCUMENT', { payload: { title, content: source.text, kind: 'reference', folder: '参考文章', sourceUrl: source.url || location.href } });
+        await send('OPEN_WRITE_DESK', { id: document.id });
+        state.notice = '文章已保存到写作台的参考文章文件夹。'; state.error = ''; refresh();
+      } catch (error) { state.error = error.message; refresh(); }
+    };
     container.querySelector('#bx-save-structure')?.addEventListener('click', () => saveCurrent(currentInputText(), 'structure'));
     container.querySelector('#bx-read-article')?.addEventListener('click', () => {
       const article = longArticleOnPage();

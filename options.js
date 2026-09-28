@@ -279,7 +279,7 @@ try {
   $('#agent-base-url').value = settings.agentBaseUrl || DEFAULT_SETTINGS.agentBaseUrl;
   $('#agent-model').value = settings.agentModel || DEFAULT_SETTINGS.agentModel;
   $('#agent-key').value = data.agentKey || '';
-  $('#agent-model').disabled = settings.agentProvider === 'opencode';
+  $('#agent-model').disabled = false;
   for (const id of Object.keys(providerDrafts)) {
     providerDrafts[id] = {
       label: settings.providers[id].label, kind: settings.providers[id].kind,
@@ -441,8 +441,8 @@ $('#refresh-sessions').onclick = listSessions;
 listSessions();
 
 $('#agent-provider').onchange = () => {
-  $('#agent-base-url').value = $('#agent-provider').value === 'opencode' ? 'http://127.0.0.1:4096' : 'http://127.0.0.1:11434';
-  $('#agent-model').disabled = $('#agent-provider').value === 'opencode';
+  $('#agent-base-url').value = 'http://127.0.0.1:4097';
+  $('#agent-model').disabled = false;
 };
 $('#test-agent').onclick = async () => {
   const version = formVersion;

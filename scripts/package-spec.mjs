@@ -24,16 +24,13 @@ export const ROOT_FILES = [
   'options.html',
   'options.js',
   'shared.js',
-  'writing.html',
-  'writing.js',
-  'writing.css',
   '安装与更新.md'
 ];
 
 // 已退役的更新机制文件名：出现在 ZIP 内一律视为缺陷（verify-package 会据此失败）。
 export const RETIRED_UPDATE_FILES = ['update-unpacked.ps1', 'update-marker.json'];
 
-export const RUNTIME_DIRS = ['mdx', 'modules', 'services', 'sidebar', 'write'];
+export const RUNTIME_DIRS = ['mdx', 'modules', 'services', 'sidebar', 'write', 'pi-bridge'];
 
 // 通用安装说明：优先随包内附的《安装与更新》，README 的「下载与安装」作为兜底。
 export const INSTALL_DOC_CANDIDATES = ['安装与更新.md', 'README.md'];

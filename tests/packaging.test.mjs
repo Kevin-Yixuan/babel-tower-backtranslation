@@ -28,7 +28,7 @@ test('实际扩展包包含写作台完整运行文件与隐私说明', () => {
     const report = JSON.parse(fs.readFileSync(path.join(out, 'package-report.json'), 'utf8'));
     const zip = path.join(out, report.zip);
     const entries = readZipEntries(zip);
-    for (const name of ['write/desk.html', 'write/desk.js', 'write/desk.css', 'write/markdown.js', 'services/agent.js', 'modules/agent/agent.js', 'privacy.md']) {
+    for (const name of ['write/desk.html', 'write/desk.js', 'write/desk.css', 'write/markdown.js', 'services/pi-agent.js', 'pi-bridge/server.mjs', 'modules/agent/agent.js', 'privacy.md']) {
       const entry = entries.find(item => item.name === `babel-tower-backtranslation-${report.version}/${name}`);
       assert.ok(entry, `ZIP missing ${name}`);
       assert.deepEqual(readZipEntryData(zip, entry), fs.readFileSync(path.join(repoRoot, name)));

@@ -251,9 +251,22 @@
     }
     const stateEditorOK = state.editor?.isConnected && visibleInPage(state.editor);
     const visible = visibleEditors();
-    let editor = stateEditorOK ? state.editor : (visible.length === 1 ? visible[0] : null);
+    // A reply dialog can coexist with editors behind it. Prefer its single composer;
+    // a background composer must never make the target ambiguous or win focus.
+    const dialogs = [...document.querySelectorAll('[role="dialog"]')].filter(visibleInPage);
+    const dialogEditors = dialogs.flatMap(dialog => visible.filter(candidate => dialog.contains(candidate)));
+    let editor = dialogEditors.length === 1 ? dialogEditors[0] :
+      (stateEditorOK ? state.editor : (visible.length === 1 ? visible[0] : null));
     if (!editor) {
       return { ok: false, editor: null, post: sessionPost, reasonText: `${sessionLabel}无法确定对应的发帖框（页面可见发帖框数量：${visible.length}）。` };
+    }
+    const dialog = editor.closest('[role="dialog"]');
+    if (dialog) {
+      const keys = dialogPostUrls(dialog);
+      if (dialogEditors.length === 1 && dialogMatchesPost(dialog, sessionPost, keys)) {
+        return { ok: true, editor, post: sessionPost, dialog };
+      }
+      return { ok: false, editor, post: sessionPost, reasonText: `${sessionLabel}回复弹层里无法唯一核对原帖链接。请使用「复制草稿」。` };
     }
     const ownArticle = editor.closest('article');
     if (ownArticle) {
@@ -263,11 +276,13 @@
       }
       return { ok: true, editor, post: sessionPost, article: ownArticle };
     }
-    // X can put the reply composer outside the article. Only accept a dialog that
-    // contains exactly one status permalink, and that permalink must be our post.
-    const dialog = editor.closest('[role="dialog"]');
-    if (dialog && visible.length === 1 && dialogPostUrls(dialog).length === 1 && dialogPostUrls(dialog)[0] === postKey) {
-      return { ok: true, editor, post: sessionPost, dialog };
+    // On a single-post page, X may render the composer outside both article and
+    // dialog. The route and the one visible source article must still agree.
+    const routeKey = window.BXContext.key(location.href);
+    const matchingPosts = [...document.querySelectorAll('article[data-testid="tweet"]')]
+      .filter(visibleInPage).filter(article => window.BXContext.key(postFrom(article).url) === postKey);
+    if (visible.length === 1 && routeKey === postKey && matchingPosts.length === 1) {
+      return { ok: true, editor, post: sessionPost, routeKey };
     }
     return { ok: false, editor, post: sessionPost, reasonText: `${sessionLabel}这个独立编辑框没有可核对的原帖链接，不能证明它是正确的回复框。请使用「复制草稿」。` };
   }
@@ -278,6 +293,16 @@
       .filter(href => /\/status\/\d+/.test(href || ''))
       .map(href => window.BXContext.key(new URL(href, location.origin).href))
       .filter(key => key.startsWith('post:')))];
+  }
+
+  function dialogMatchesPost(dialog, post, keys = dialogPostUrls(dialog)) {
+    const expected = window.BXContext.key(post?.url || '');
+    if (keys.length) return keys.length === 1 && keys[0] === expected;
+    // Some X reply dialogs render the quoted post without a permalink. Its
+    // displayed body must be an exact match and unique within this dialog.
+    const bodies = [...dialog.querySelectorAll('[data-testid="tweetText"]')]
+      .map(node => node.innerText?.trim()).filter(Boolean);
+    return bodies.length === 1 && bodies[0] === String(post?.text || '').trim();
   }
 
   async function copyDraft() {
@@ -304,13 +329,20 @@
       BX.refresh(); return;
     }
     const editor = binding.editor;
+    if (binding.routeKey && (window.BXContext.key(location.href) !== binding.routeKey ||
+      [...document.querySelectorAll('article[data-testid="tweet"]')].filter(visibleInPage)
+        .filter(article => window.BXContext.key(postFrom(article).url) === binding.routeKey).length !== 1)) {
+      state.error = '页面已切换，未写入任何内容。请重新打开回复框。';
+      state.insertConfirm = false; state.binding = null;
+      BX.refresh(); return;
+    }
     if (binding.article && (!binding.article.isConnected || editor.closest('article') !== binding.article)) {
       state.error = '目标发帖框的归属已变化，未写入任何内容。请重新打开回复框。';
       state.insertConfirm = false; state.binding = null;
       BX.refresh(); return;
     }
     if (binding.dialog && (!binding.dialog.isConnected || !binding.dialog.contains(editor)
-      || dialogPostUrls(binding.dialog).length !== 1 || dialogPostUrls(binding.dialog)[0] !== window.BXContext.key(binding.post?.url || ''))) {
+      || !dialogMatchesPost(binding.dialog, binding.post))) {
       state.error = '回复弹层的原帖已变化，未写入任何内容。请重新打开回复框或复制草稿。';
       state.insertConfirm = false; state.binding = null;
       BX.refresh(); return;

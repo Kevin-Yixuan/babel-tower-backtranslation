@@ -293,6 +293,35 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   await page.screenshot({ path: path.join(out, 'reply-insert-confirm.png'), fullPage: true });
   console.log('INSERT_REFUSE_AND_APPEND_OK');
 
+  // X can show a reply dialog without a permalink while background composers
+  // remain visible. Its unique quoted post body must identify the target.
+  await page.evaluate(postText => {
+    const dialog = document.createElement('div');
+    dialog.id = 'reply-dialog-test';
+    dialog.setAttribute('role', 'dialog');
+    dialog.style.cssText = 'position:fixed;top:20px;left:20px;width:500px;height:220px;background:white;z-index:9999';
+    const quoted = document.createElement('div');
+    quoted.dataset.testid = 'tweetText';
+    quoted.textContent = postText;
+    const editor = document.createElement('div');
+    editor.id = 'edDialog';
+    editor.setAttribute('role', 'textbox');
+    editor.contentEditable = 'true';
+    editor.style.cssText = 'height:80px;width:400px';
+    dialog.append(quoted, editor);
+    document.body.append(dialog);
+  }, POST_B_TEXT);
+  await draftBox.fill('Dialog reply for B');
+  await page.locator('#edDialog').focus();
+  await page.locator('#bx-insert').click();
+  const dialogConfirm = page.locator('.bx-insert-confirm:not(.bx-insert-blocked)');
+  await dialogConfirm.waitFor();
+  await dialogConfirm.locator('#bx-insert-confirm').click();
+  assert((await page.locator('#edDialog').innerText()).includes('Dialog reply for B'), '无链接弹层应插入核对过的目标编辑框');
+  assert.equal(await page.locator('#edA').innerText(), 'A existing', '弹层插入不得触碰背景 A 编辑框');
+  await page.locator('#reply-dialog-test').evaluate(element => element.remove());
+  console.log('INSERT_DIALOG_UNIQUE_QUOTE_OK');
+
   // ─── ⑧ 后半：init prompt 编辑生效 → STORE 往返 → 恢复默认 ───
   // Post B owns a separate collapsed prompt panel; open it before editing.
   if (!(await page.locator('#bx-init-prompt').evaluate(el => el.open))) await page.locator('#bx-init-prompt summary').click();
