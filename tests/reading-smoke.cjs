@@ -204,7 +204,10 @@ const say = line => { log.push(line); console.log(line); };
   await tweets.locator('#a .bx-inline-button').click();
   // Restored scope is selection; explicitly choose full material, then request it.
   await tweets.locator('#bx-read-scope').selectOption('full');
-  await tweets.locator('#bx-retranslate').click();
+  // Scope change may start auto translation before Playwright clicks. The
+  // explicit translate button remains available in both states; retranslate
+  // becomes disabled while that request is in flight.
+  await tweets.locator('#bx-translate-now').click();
   await waitPending(1); // A full translation is now in flight
   await selectRange(tweets, '#a [data-testid="tweetText"]', 0, 33);
   await tweets.locator('#bx-translate-now').click();
