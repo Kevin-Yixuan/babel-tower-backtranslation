@@ -1,10 +1,10 @@
 {
   "name": "backwrite-x",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/core.test.mjs tests/content-scan.test.mjs tests/pi-writing.test.mjs tests/pi-agent.test.mjs tests/pi-bridge.test.mjs tests/ripemd.test.mjs tests/mdx-html.test.mjs tests/mdx-pipeline.test.mjs tests/release.test.mjs tests/sessions.test.mjs tests/settings-core.test.mjs tests/markdown.test.mjs tests/settings-page.test.mjs",
+    "test": "node --test tests/core.test.mjs tests/content-scan.test.mjs tests/pi-writing.test.mjs tests/pi-agent.test.mjs tests/pi-bridge.test.mjs tests/pi-http.test.mjs tests/ripemd.test.mjs tests/mdx-html.test.mjs tests/mdx-pipeline.test.mjs tests/release.test.mjs tests/sessions.test.mjs tests/settings-core.test.mjs tests/markdown.test.mjs tests/settings-page.test.mjs",
     "test:browser": "node tests/smoke.cjs && node tests/adversarial-smoke.cjs && node tests/timeline.cjs && node tests/jev-adversarial.cjs && node tests/dictionary-wiring.cjs && node tests/reading-smoke.cjs && node tests/translation-controls.cjs && node tests/reply-smoke.cjs && node tests/growth-logic.cjs && node tests/growth-smoke.cjs && node tests/discovery-smoke.cjs && node tests/release-regressions.cjs && node tests/ux-browser.cjs && node tests/redesign-smoke.cjs",
     "test:ux": "node tests/ux-browser.cjs"
   }
