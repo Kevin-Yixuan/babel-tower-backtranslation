@@ -11,8 +11,9 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand"><span class="logo">回</span><div><b>自由写作台</b><small>Markdown 文稿 + 开源 Agent</small></div></div>
-      <div class="document-title"><input id="doc-title" value="未命名文稿" maxlength="100" aria-label="文稿标题"><span id="save-state">已保存</span></div>
+      <div class="document-title"><input id="doc-title" value="未命名文稿" maxlength="100" aria-label="文稿标题"><span id="save-state" role="status" aria-live="polite">已保存</span></div>
       <div class="top-actions">
+        <button id="retry-save" hidden>重试保存</button>
         <button class="pane-toggle" data-pane="library" aria-controls="writing-library" aria-expanded="false">文稿库</button><button class="pane-toggle" data-pane="agent" aria-controls="writing-agent" aria-expanded="false">写作助手</button>
         <a href="../options.html" target="_blank" rel="noopener">设置</a><button id="copy-markdown">复制 Markdown</button><button id="copy-rich-x">复制 X 文章排版</button>
         <button id="new-document" class="primary">新建文稿</button>

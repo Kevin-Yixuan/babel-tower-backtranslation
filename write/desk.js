@@ -59,6 +59,7 @@ function toast(message, error = false) {
 
 function setSaveState(text) {
   $('#save-state').textContent = text;
+  $('#retry-save').hidden = text !== '保存失败';
 }
 
 function currentContent() {
@@ -102,7 +103,13 @@ async function saveCurrent() {
   if (!state.document) return;
   clearTimeout(state.saveTimer);
   const payload = { id: state.document.id, title: currentTitle(), content: currentContent(), folder: state.document.folder, kind: state.document.kind, sourceUrl: state.document.sourceUrl };
-  const saved = await send('SAVE_DOCUMENT', { payload });
+  setSaveState('保存中…');
+  let saved;
+  try { saved = await send('SAVE_DOCUMENT', { payload }); }
+  catch (error) {
+    if (state.document?.id === payload.id) setSaveState('保存失败');
+    throw error;
+  }
   // A late save must not overwrite edits made during storage I/O or another document.
   if (state.document?.id === saved.id) {
     state.document = saved;
@@ -323,6 +330,12 @@ $('#move-document').onclick = async () => {
   renderDocumentList();
 };
 $('#library-search').addEventListener('input', renderDocumentList);
+$('#retry-save').onclick = () => saveCurrent().catch(error => toast(error.message, true));
+document.addEventListener('keydown', event => {
+  if (event.isComposing || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return;
+  event.preventDefault();
+  saveCurrent().catch(error => toast(error.message, true));
+});
 $('#delete-document').onclick = deleteCurrentDocument;
 $('#copy-markdown').onclick = async () => {
   try { await navigator.clipboard.writeText(currentContent()); toast('Markdown 已复制。'); }

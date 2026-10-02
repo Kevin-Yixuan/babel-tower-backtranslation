@@ -92,6 +92,33 @@ const os = require('node:os');
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.screenshot({ path: path.join(evidence, 'writing-desktop.png'), fullPage: true });
 
+    await worker.evaluate(() => {
+      globalThis.originalDocumentSet = chrome.storage.local.set;
+      chrome.storage.local.set = async values => {
+        if (values.documents) throw new Error('测试：存储空间不足');
+        return globalThis.originalDocumentSet(values);
+      };
+    });
+    await page.locator('#markdown-editor').fill('# 保存失败后保留编辑内容');
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '保存失败', null, { timeout: 5000 });
+    assert.equal(await page.locator('#markdown-editor').inputValue(), '# 保存失败后保留编辑内容');
+    assert(await page.locator('#retry-save').isVisible());
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    assert(await page.locator('#retry-save').evaluate(node => node.getBoundingClientRect().right <= innerWidth));
+    await page.screenshot({ path: path.join(evidence, 'writing-save-failed.png'), fullPage: true });
+    assert.equal(await worker.evaluate(async () => Object.values((await chrome.storage.local.get('documents')).documents).some(document => document.content === '# 保存失败后保留编辑内容')), false);
+    await worker.evaluate(() => { chrome.storage.local.set = globalThis.originalDocumentSet; });
+    await page.locator('#retry-save').click();
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    assert.equal(await page.locator('#retry-save').isVisible(), false);
+    assert(await worker.evaluate(async () => Object.values((await chrome.storage.local.get('documents')).documents).some(document => document.content === '# 保存失败后保留编辑内容')));
+    await page.locator('#markdown-editor').fill('# 快捷键立即保存');
+    await page.keyboard.press('Control+s');
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    assert(await worker.evaluate(async () => Object.values((await chrome.storage.local.get('documents')).documents).some(document => document.content === '# 快捷键立即保存')));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+
     await worker.evaluate(async () => {
       const { settings } = await chrome.storage.local.get('settings');
       await chrome.storage.local.set({ settings: { ...settings, agentBaseUrl: 'http://127.0.0.1:4097' }, agentKey: 'test-token' });
