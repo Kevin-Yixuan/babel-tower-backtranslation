@@ -40,15 +40,19 @@ async function chat(payload) {
   const { agentSessions = {} } = await storage.get('agentSessions');
   const id = clean(payload.sessionId, 80) || crypto.randomUUID();
   const previous = agentSessions[id] || { id, title: instruction.slice(0, 36), messages: [], createdAt: new Date().toISOString() };
+  const context = Array.isArray(payload.context) ? payload.context : [];
   const history = previous.provider === 'pi' && previous.baseUrl === url && previous.model === model ? previous.messages : [];
   const transcript = clampAgentHistory(history).map(item => `${item.role === 'user' ? '用户' : '助手'}：${item.content}`).join('\n\n');
   const prompt = [systemPrompt, transcript && `# 此前会话\n${transcript}`, agentContextBlock(payload.context), `# 当前任务\n${instruction}`].filter(Boolean).join('\n\n');
+  if (prompt.length > 80000) throw new Error('本轮指令、上下文与会话历史合计超过 80000 字符，请减少材料或新建会话。');
   const result = await bridge('/chat', { prompt, model });
-  const answer = clean(result.answer, 40000);
+  if (typeof result.answer !== 'string') throw new Error('Pi 返回的内容不是文字，请重试。');
+  const answer = result.answer.trim();
+  if (answer.length > 40000) throw new Error('Pi 回复超过 40000 字符，本次没有保存截断内容。请要求分段生成后重试。');
   if (!answer) throw new Error('Pi 没有返回文字。');
   const now = new Date().toISOString();
   const messages = [...history,
-    { role: 'user', content: instruction, contextLabels: (payload.context || []).map(item => clean(item.label, 40)), createdAt: now },
+    { role: 'user', content: instruction, contextLabels: context.slice(0, 8).map(item => clean(item?.label, 40)), createdAt: now },
     { role: 'assistant', content: answer, createdAt: now }
   ].slice(-24);
   const session = { ...previous, provider: 'pi', baseUrl: url, model, messages, updatedAt: now };

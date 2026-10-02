@@ -110,3 +110,29 @@ test('未改动保存不制造冲突或递增版本，已删除文稿的旧窗�
   assert.equal(store.documents[original.id], undefined);
   assert.equal(store.documents[restored.id].content, '删除后旧窗口的修改');
 });
+
+test('助手超长或非文字回复明确拒绝，不保存截断内容', async () => {
+  const originalFetch = globalThis.fetch;
+  const before = JSON.stringify(store.agentSessions);
+  try {
+    for (const answer of ['x'.repeat(40001), { content: '错误结构' }]) {
+      globalThis.fetch = async () => Response.json({ answer });
+      await assert.rejects(agentOp({ action: 'AGENT_CHAT', payload: { sessionId: 'invalid-answer', message: '生成文稿' } }), /超过 40000|不是文字/);
+      assert.equal(JSON.stringify(store.agentSessions), before);
+    }
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test('超长组合上下文在请求前拒绝，合法上下文使用实际换行', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0, prompt;
+  globalThis.fetch = async (_url, options) => { calls++; prompt = JSON.parse(options.body).prompt; return Response.json({ answer: '回复' }); };
+  try {
+    await assert.rejects(agentOp({ action: 'AGENT_CHAT', payload: { message: '整理', context: Array.from({ length: 5 }, () => ({ content: 'x'.repeat(20000) })) } }), /合计超过 80000/);
+    assert.equal(calls, 0);
+    await agentOp({ action: 'AGENT_CHAT', payload: { message: '整理', context: [{ label: '材料', content: '第一段\n第二段' }] } });
+    assert.match(prompt, /# 当前任务\n整理/);
+    assert.match(prompt, /## 材料\n第一段\n第二段/);
+    assert.equal(prompt.includes('\\n'), false);
+  } finally { globalThis.fetch = originalFetch; }
+});
