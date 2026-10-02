@@ -1,6 +1,31 @@
 import { markdownTitle, renderMarkdown } from './markdown.js';
 
 const $ = selector => document.querySelector(selector);
+// Small windows keep the editor usable; drawers never recreate the document or chat.
+const shell = $('.app-shell');
+function setPane(pane, open) {
+  shell.classList.toggle(`${pane}-open`, open);
+  document.querySelector(`[data-pane="${pane}"]`).setAttribute('aria-expanded', String(open));
+}
+document.querySelectorAll('[data-pane]').forEach(button => {
+  button.onclick = () => {
+    const pane = button.dataset.pane;
+    const open = !shell.classList.contains(`${pane}-open`);
+    if (matchMedia('(max-width:760px)').matches) setPane(pane === 'agent' ? 'library' : 'agent', false);
+    setPane(pane, open);
+  };
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || event.isComposing) return;
+  for (const pane of ['library', 'agent']) {
+    if (!shell.classList.contains(`${pane}-open`)) continue;
+    setPane(pane, false);
+    document.querySelector(`[data-pane="${pane}"]`).focus();
+  }
+});
+new ResizeObserver(() => {
+  shell.style.setProperty('--desk-top-height', `${$('.topbar').getBoundingClientRect().height}px`);
+}).observe($('.topbar'));
 const send = (action, payload = {}) => new Promise((resolve, reject) => {
   chrome.runtime.sendMessage({ action, ...payload }, response => {
     if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));

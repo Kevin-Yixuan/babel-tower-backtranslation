@@ -266,6 +266,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       await seed(Array.from({ length: 25 }, (_, index) => ({ key: 'post:' + (7500 + index), data: { draft: 'History draft ' + index, selected: 'History source ' + index } }))
         .concat([{ key: 'conflict:ux-history', sourceKey: 'post:7500', data: { draft: 'CONFLICT_ONLY_DRAFT', selected: 'A preserved alternate draft' } }]));
       const page = await options();
+      await page.locator('[data-tab="data"]').click();
       await page.locator('#session-search').waitFor();
       await page.waitForFunction(() => document.querySelectorAll('#session-list .session-item').length === 20);
       await page.getByRole('button', { name: '显示更多', exact: true }).click();
@@ -285,6 +286,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     await test('backup: visible conflicts and partial storage failure', async () => {
       await worker.evaluate(() => chrome.storage.local.set({ glossary: { shared: 'LOCAL' }, initPrompt: 'LOCAL PROMPT', cards: [{ id: 'ux-same', text: 'LOCAL CARD' }] }));
       const page = await options();
+      await page.locator('[data-tab="data"]').click();
       const archive = { format: 'babel-tower-backup', version: 1, storage: {
         glossary: { shared: 'INCOMING', added: 'NEW' }, initPrompt: 'INCOMING PROMPT',
         cards: [{ id: 'ux-same', text: 'INCOMING CARD' }]

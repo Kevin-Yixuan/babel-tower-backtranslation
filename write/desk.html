@@ -13,12 +13,13 @@
       <div class="brand"><span class="logo">回</span><div><b>自由写作台</b><small>Markdown 文稿 + 开源 Agent</small></div></div>
       <div class="document-title"><input id="doc-title" value="未命名文稿" maxlength="100" aria-label="文稿标题"><span id="save-state">已保存</span></div>
       <div class="top-actions">
-        <a href="../options.html" target="_blank" rel="noopener">Pi 设置</a><button id="copy-markdown">复制 Markdown</button><button id="copy-rich-x">排版到 X 文章</button>
+        <button class="pane-toggle" data-pane="library" aria-controls="writing-library" aria-expanded="false">文稿库</button><button class="pane-toggle" data-pane="agent" aria-controls="writing-agent" aria-expanded="false">写作助手</button>
+        <a href="../options.html" target="_blank" rel="noopener">设置</a><button id="copy-markdown">复制 Markdown</button><button id="copy-rich-x">复制 X 文章排版</button>
         <button id="new-document" class="primary">新建文稿</button>
       </div>
     </header>
 
-    <aside class="library" aria-label="文稿库">
+    <aside id="writing-library" class="library" aria-label="文稿库">
       <div class="aside-title"><div><small>资料库</small><b>我的写作</b></div><button id="quick-note" title="新建笔记">＋</button></div>
       <div class="library-tools"><button id="new-folder">新建文件夹</button><button id="new-reference">保存参考</button></div>
       <input id="library-search" class="library-search" type="search" placeholder="搜索文章与参考">
@@ -48,7 +49,7 @@
       </div>
     </main>
 
-    <aside class="agent-panel" aria-label="写作 Agent">
+    <aside id="writing-agent" class="agent-panel" aria-label="写作 Agent">
       <div class="agent-head">
         <div><small>OPEN AGENT</small><h1>写作协作者</h1></div>
         <button id="agent-reset">新会话</button>

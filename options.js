@@ -25,6 +25,8 @@ function setDirty(next) {
   dirty = Boolean(next);
   const label = $('#settings-dirty-status');
   if (label) label.textContent = dirty ? '有未保存的修改，保存后才生效。' : '所有修改已保存。';
+  const hint = $('#settings-save-hint');
+  if (hint) hint.textContent = dirty ? '有未保存的修改 · 保存后生效' : '所有修改已保存';
 }
 function markFormEdit() { formVersion++; setDirty(true); }
 // 离开/刷新只在有未保存修改时提示；干净页面不拦。
@@ -35,7 +37,10 @@ function status(message, error = false) {
   $('#status').classList.toggle('error', error);
 }
 function switchTab(tab) {
-  document.querySelectorAll('[data-tab]').forEach(button => button.classList.toggle('active', button.dataset.tab === tab));
+  document.querySelectorAll('[data-tab]').forEach(button => {
+    button.classList.toggle('active', button.dataset.tab === tab);
+    button.setAttribute('aria-current', button.dataset.tab === tab ? 'page' : 'false');
+  });
   document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== tab);
   status('');
   if (tab === 'saved') loadSaved();
