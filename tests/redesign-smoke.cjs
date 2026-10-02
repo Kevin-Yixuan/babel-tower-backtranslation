@@ -49,6 +49,27 @@ const os = require('node:os');
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: path.join(evidence, 'settings-narrow.png'), fullPage: true });
 
+    const localDocument = { id: 'restore-a', title: '本地稿', content: '本地正文', folder: '我的文章' };
+    await worker.evaluate(document => chrome.storage.local.set({ documents: { [document.id]: document } }), localDocument);
+    const backup = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
+      documents: { [localDocument.id]: { ...localDocument, title: '归档稿', content: '归档修改' } }
+    } };
+    const uploadBackup = () => page.locator('#import-backup').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await uploadBackup();
+    await page.waitForFunction(() => document.querySelector('#backup-preview').textContent.includes('另存 1 项'));
+    assert((await page.locator('#backup-preview').textContent()).includes('1 份文稿'));
+    assert.equal(await worker.evaluate(async () => Object.keys((await chrome.storage.local.get('documents')).documents).length), 1);
+    await page.locator('#confirm-import').click();
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('数据已合并'));
+    const restored = await worker.evaluate(async () => (await chrome.storage.local.get('documents')).documents);
+    assert.equal(restored['restore-a'].content, '本地正文');
+    assert(Object.values(restored).some(document => document.content === '归档修改' && document.id !== 'restore-a'));
+    await uploadBackup();
+    await page.waitForFunction(() => document.querySelector('#backup-preview').textContent.includes('跳过 1 项、另存 0 项'));
+    await page.locator('#confirm-import').click();
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('数据已合并'));
+    assert.equal(await worker.evaluate(async () => Object.keys((await chrome.storage.local.get('documents')).documents).length), 2);
+
     await page.goto(`${base}/write/desk.html`);
     await page.locator('#markdown-editor').fill('# 保留我的草稿\n\n切换侧栏也不会丢失。');
     await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');

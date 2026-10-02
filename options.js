@@ -343,7 +343,7 @@ $('#import-backup').onchange = async event => {
     const archive = JSON.parse(await file.text());
     const counts = await send('BACKUP', { payload: { op: 'preview', archive } });
     importArchive = archive;
-    $('#backup-preview').textContent = '将合并：' + counts.sessions + ' 个帖子会话、' + counts.drafts + ' 份写作草稿、'
+    $('#backup-preview').textContent = '将合并：' + counts.sessions + ' 个帖子会话、' + counts.documents + ' 份文稿、' + counts.drafts + ' 份写作草稿、'
       + counts.cards + ' 条收藏、' + counts.memories + ' 条学习记录。导入 ' + counts.imported
       + ' 项、跳过 ' + counts.skipped + ' 项、另存 ' + counts.extra + ' 项。冲突内容另存，不删除原记录。MDX 需重新导入，密钥不迁移。';
     $('#confirm-import').hidden = false;
