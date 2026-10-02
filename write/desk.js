@@ -99,10 +99,17 @@ function scheduleSave() {
   state.saveTimer = setTimeout(() => saveCurrent().catch(error => toast(error.message, true)), 650);
 }
 
-async function saveCurrent() {
+let saveQueue = Promise.resolve();
+function saveCurrent() {
+  const result = saveQueue.then(persistCurrent);
+  saveQueue = result.catch(() => {});
+  return result;
+}
+
+async function persistCurrent() {
   if (!state.document) return;
   clearTimeout(state.saveTimer);
-  const payload = { id: state.document.id, title: currentTitle(), content: currentContent(), folder: state.document.folder, kind: state.document.kind, sourceUrl: state.document.sourceUrl };
+  const payload = { id: state.document.id, expectedRevision: state.document.revision || 0, title: currentTitle(), content: currentContent(), folder: state.document.folder, kind: state.document.kind, sourceUrl: state.document.sourceUrl };
   setSaveState('保存中…');
   let saved;
   try { saved = await send('SAVE_DOCUMENT', { payload }); }
@@ -111,9 +118,19 @@ async function saveCurrent() {
     throw error;
   }
   // A late save must not overwrite edits made during storage I/O or another document.
-  if (state.document?.id === saved.id) {
+  if (state.document?.id === payload.id) {
+    const unchanged = currentTitle() === payload.title && currentContent() === payload.content;
     state.document = saved;
-    if (currentTitle() === payload.title && currentContent() === payload.content) setSaveState('已保存');
+    if (saved.id !== payload.id) {
+      if (currentTitle() === payload.title) $('#doc-title').value = saved.title;
+      history.replaceState(null, '', `?doc=${encodeURIComponent(saved.id)}`);
+      state.agentSessionId = `doc:${saved.id}`;
+      state.agentMessages = [];
+      state.lastAnswer = '';
+      renderAgentThread();
+      toast('另一窗口已修改这份文稿，你的内容已另存冲突副本。');
+    }
+    if (unchanged) setSaveState('已保存');
   }
   await loadDocumentList(false);
 }

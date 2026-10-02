@@ -46,6 +46,8 @@ export function normalizeDocument(payload, previous = {}) {
     folder: String(payload?.folder ?? previous.folder ?? (payload?.kind === 'reference' ? '参考文章' : '我的文章')).trim().slice(0, 100) || '我的文章',
     kind: payload?.kind === 'reference' || previous.kind === 'reference' ? 'reference' : 'draft',
     sourceUrl: String(payload?.sourceUrl ?? previous.sourceUrl ?? '').trim().slice(0, 2000),
+    revision: (Number.isSafeInteger(previous.revision) && previous.revision >= 0 ? previous.revision : 0) + 1,
+    ...(previous.conflictOf ? { conflictOf: previous.conflictOf } : {}),
     createdAt: previous.createdAt || now,
     updatedAt: now
   };
