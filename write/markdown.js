@@ -7,7 +7,7 @@ function safeHref(value) {
   } catch { return ''; }
 }
 
-export function inlineMarkdown(source) {
+export function inlineMarkdown(source, { allowImages = false } = {}) {
   const tokens = [];
   const stash = html => {
     const token = `\u0000${tokens.length}\u0000`;
@@ -16,6 +16,16 @@ export function inlineMarkdown(source) {
   };
   let text = String(source || '');
   text = text.replace(/`([^`\n]+)`/g, (_, code) => stash(`<code>${escapeHTML(code)}</code>`));
+  text = text.replace(/!\[([^\]]*)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g, (_, label, href) => {
+    let safe = '';
+    try {
+      const url = new URL(href);
+      if (['https:', 'http:'].includes(url.protocol) && !url.username && !url.password) safe = url.href;
+    } catch { /* Local and malformed image references stay as text. */ }
+    return stash(allowImages && safe
+      ? `<img src="${escapeHTML(safe)}" alt="${escapeHTML(label)}" loading="lazy" referrerpolicy="no-referrer">`
+      : `<span class="image-placeholder">[图片：${escapeHTML(label || '未命名')}]</span>`);
+  });
   text = text.replace(/\[([^\]]+)\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g, (_, label, href) => {
     const safe = safeHref(href);
     return safe ? stash(`<a href="${escapeHTML(safe)}" target="_blank" rel="noopener noreferrer">${escapeHTML(label)}</a>`) : escapeHTML(label);
@@ -28,7 +38,8 @@ export function inlineMarkdown(source) {
   return text.replace(/\u0000(\d+)\u0000/g, (_, index) => tokens[Number(index)] || '');
 }
 
-export function renderMarkdown(source) {
+export function renderMarkdown(source, options = {}) {
+  const inline = text => inlineMarkdown(text, options);
   const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
   const output = [];
   let paragraph = [];
@@ -40,7 +51,7 @@ export function renderMarkdown(source) {
 
   const flushParagraph = () => {
     if (!paragraph.length) return;
-    output.push(`<p>${inlineMarkdown(paragraph.join(' '))}</p>`);
+    output.push(`<p>${inline(paragraph.join(' '))}</p>`);
     paragraph = [];
   };
   const flushList = () => {
@@ -67,7 +78,7 @@ export function renderMarkdown(source) {
     if (heading) {
       flushParagraph(); flushList();
       const level = heading[1].length;
-      output.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+      output.push(`<h${level}>${inline(heading[2])}</h${level}>`);
       continue;
     }
     if (/^\s*([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
@@ -75,7 +86,7 @@ export function renderMarkdown(source) {
     }
     const quote = line.match(/^>\s?(.*)$/);
     if (quote) {
-      flushParagraph(); flushList(); output.push(`<blockquote>${inlineMarkdown(quote[1])}</blockquote>`); continue;
+      flushParagraph(); flushList(); output.push(`<blockquote>${inline(quote[1])}</blockquote>`); continue;
     }
     const task = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.+)$/);
     const unordered = line.match(/^\s*[-*+]\s+(.+)$/);
@@ -85,8 +96,8 @@ export function renderMarkdown(source) {
       const nextType = ordered ? 'ol' : 'ul';
       if (listType && listType !== nextType) flushList();
       listType = nextType;
-      if (task) listItems.push(`<li class="task"><input type="checkbox" disabled ${task[1].toLowerCase() === 'x' ? 'checked' : ''}>${inlineMarkdown(task[2])}</li>`);
-      else listItems.push(`<li>${inlineMarkdown((ordered || unordered)[1])}</li>`);
+      if (task) listItems.push(`<li class="task"><input type="checkbox" disabled ${task[1].toLowerCase() === 'x' ? 'checked' : ''}>${inline(task[2])}</li>`);
+      else listItems.push(`<li>${inline((ordered || unordered)[1])}</li>`);
       continue;
     }
     flushList();

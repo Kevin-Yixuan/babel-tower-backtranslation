@@ -139,6 +139,33 @@ const os = require('node:os');
     assert.equal(await worker.evaluate(async id => (await chrome.storage.local.get('documents')).documents[id].content, copyId), '# 窗口 B 继续修改');
     await secondWindow.close();
 
+    let imageRequests = 0;
+    await page.route('https://images.example.com/fixture.png', route => {
+      imageRequests++;
+      return route.fulfill({ contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aQ3cAAAAASUVORK5CYII=', 'base64') });
+    });
+    await page.locator('#markdown-editor').fill('# 图片文稿\n\n![图示](https://images.example.com/fixture.png)');
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    await page.locator('[data-view="preview"]').click();
+    assert.equal(await page.locator('#markdown-preview img').count(), 0);
+    assert.equal(imageRequests, 0);
+    await page.locator('#load-images').check();
+    await page.waitForFunction(() => document.querySelector('#markdown-preview img')?.naturalWidth === 1);
+    assert.equal(imageRequests, 1);
+    await page.locator('#load-images').uncheck();
+    assert.equal(await page.locator('#markdown-preview img').count(), 0);
+    await page.evaluate(() => {
+      window.originalImageOpen = window.open;
+      window.open = () => null;
+      Object.defineProperty(navigator.clipboard, 'write', { configurable: true, value: async items => { window.imageClipboard = items; } });
+    });
+    await page.locator('#copy-rich-x').click();
+    const copiedHtml = await page.evaluate(async () => (await window.imageClipboard[0].getType('text/html')).text());
+    assert(copiedHtml.includes('<img src="https://images.example.com/fixture.png"'));
+    assert.equal(imageRequests, 1, '复制排版不应自行加载外部图片');
+    await page.evaluate(() => { window.open = window.originalImageOpen; delete navigator.clipboard.write; });
+    await page.locator('[data-view="write"]').click();
+
     await worker.evaluate(async () => {
       const { settings } = await chrome.storage.local.get('settings');
       await chrome.storage.local.set({ settings: { ...settings, agentBaseUrl: 'http://127.0.0.1:4097' }, agentKey: 'test-token' });
