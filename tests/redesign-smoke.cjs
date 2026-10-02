@@ -162,6 +162,13 @@ const os = require('node:os');
     assert(await worker.evaluate(async () => Object.values((await chrome.storage.local.get('documents')).documents).some(document => document.content === '# 等待助手期间也能保存')));
     await worker.evaluate(() => globalThis.releasePiReply());
     await page.waitForFunction(() => document.querySelector('#agent-send').textContent === '发送');
+    const conversationBefore = await worker.evaluate(async () => (await chrome.storage.local.get('agentSessions')).agentSessions);
+    await worker.evaluate(() => { globalThis.fetch = async () => Response.json({ answer: 'x'.repeat(40001) }); });
+    await page.locator('#agent-prompt').fill('分段前的长文请求');
+    await page.locator('#agent-send').click();
+    await page.waitForFunction(() => document.querySelector('#toast').textContent.includes('超过 40000'));
+    assert.equal(await page.locator('#agent-prompt').inputValue(), '分段前的长文请求');
+    assert.deepEqual(await worker.evaluate(async () => (await chrome.storage.local.get('agentSessions')).agentSessions), conversationBefore);
     await worker.evaluate(() => {
       globalThis.fetch = globalThis.originalPiFetch;
       chrome.permissions.contains = globalThis.originalPiPermission;
