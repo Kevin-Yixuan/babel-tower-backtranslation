@@ -72,7 +72,7 @@ function currentTitle() {
 
 function updateEditorMeta() {
   const content = currentContent();
-  $('#markdown-preview').innerHTML = renderMarkdown(content);
+  $('#markdown-preview').innerHTML = renderMarkdown(content, { allowImages: $('#load-images').checked });
   $('#word-count').textContent = `${content.replace(/\s/g, '').length} 字`;
   $('#document-context-detail').textContent = `全文 · ${content.length} 字${content.length > 20000 ? '（超过发送上限 20000，请改选短段落）' : ''}`;
   updateContextCount();
@@ -347,6 +347,7 @@ $('#move-document').onclick = async () => {
   renderDocumentList();
 };
 $('#library-search').addEventListener('input', renderDocumentList);
+$('#load-images').onchange = updateEditorMeta;
 $('#retry-save').onclick = () => saveCurrent().catch(error => toast(error.message, true));
 document.addEventListener('keydown', event => {
   if (event.isComposing || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return;
@@ -360,7 +361,7 @@ $('#copy-markdown').onclick = async () => {
 };
 $('#copy-rich-x').onclick = async () => {
   try {
-    const html = `<article>${renderMarkdown(currentContent())}</article>`;
+    const html = `<article>${renderMarkdown(currentContent(), { allowImages: true })}</article>`;
     await navigator.clipboard.write([new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
       'text/plain': new Blob([currentContent()], { type: 'text/plain' })
