@@ -112,7 +112,7 @@ function installFakeIDB() {
 const fakeIDB = installFakeIDB();
 
 const { sessionOp, cleanSnapshot } = await import('../services/sessions.js');
-const { exportBackup, validateBackup, importBackup } = await import('../services/backup.js');
+const { exportBackup, validateBackup, previewBackup, importBackup } = await import('../services/backup.js');
 
 async function removeAllSessions() {
   const all = await sessionOp({ op: 'list' });
@@ -391,6 +391,55 @@ test('导入：密钥不落盘、本地配置优先、会话失败则整体不�
 });
 
 // ================= D. 侧栏会话控制器（sidebar/sessions.js 集成） =================
+test('文稿备份冲突保留双方，预览和导入一致，重复导入不增加副本', async () => {
+  await removeAllSessions();
+  const local = { id: 'doc-a', title: '本地标题', content: '本地修改', folder: '我的文章' };
+  const incoming = { ...local, title: '归档标题', content: '归档修改' };
+  const store = installChromeMock({ documents: { 'doc-a': local } });
+  const archive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
+    documents: { 'doc-a': incoming, 'doc-b': { id: 'doc-b', title: '参考', content: '正文', folder: '参考文章', kind: 'reference', sourceUrl: 'https://x.com/a/status/1' } }
+  } };
+  const preview = await previewBackup(archive);
+  assert.equal(preview.documents, 2);
+  assert.equal(preview.extra, 1);
+  assert.equal(preview.imported, 1);
+  assert.equal(Object.keys(store.documents).length, 1, '预览不得写入');
+  const result = await importBackup(archive);
+  assert.deepEqual(result.extra, preview.extra);
+  assert.equal(Object.keys(store.documents).length, 3);
+  assert.deepEqual(store.documents['doc-a'], local);
+  const copy = Object.values(store.documents).find(item => item.content === incoming.content);
+  assert.notEqual(copy.id, local.id);
+  assert.equal(store.documents[copy.id], copy);
+  assert.equal(copy.folder, incoming.folder);
+  const repeated = await previewBackup(archive);
+  assert.equal(repeated.extra, 0);
+  assert.equal(repeated.imported, 0);
+  assert.equal(repeated.skipped, 2);
+  await importBackup(archive);
+  assert.equal(Object.keys(store.documents).length, 3);
+  // Chrome storage can return fields in a different order from the archive.
+  store.documents = Object.fromEntries(Object.entries(store.documents).map(([id, item]) =>
+    [id, Object.fromEntries(Object.entries(item).reverse())]));
+  const reordered = await previewBackup(archive);
+  assert.equal(reordered.extra, 0);
+  assert.equal(reordered.skipped, 2);
+});
+
+test('非法文稿和超容量备份在写入前拒绝', async () => {
+  const document = { id: 'a', title: '标题', content: '正文', folder: '我的文章' };
+  const archive = documents => ({ format: 'babel-tower-backup', version: 1, sessions: [], storage: { documents } });
+  for (const value of [null, [], { ...document, id: 'other' }, { ...document, content: 42 }, { ...document, content: 'x'.repeat(200001) }]) {
+    assert.throws(() => validateBackup(archive({ a: value })), /文稿数据格式/);
+  }
+  const documents = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`d${i}`, { ...document, id: `d${i}` }]));
+  const store = installChromeMock({ documents });
+  const before = JSON.stringify(store);
+  await assert.rejects(previewBackup(archive({ a: document })), /超过 200/);
+  await assert.rejects(importBackup(archive({ a: document })), /超过 200/);
+  assert.equal(JSON.stringify(store), before);
+});
+
 const POST_A = { url: 'https://x.com/alice/status/111?s=20', text: '正文A', author: 'alice' };
 const POST_A_VARIANT = { url: 'https://x.com/i/status/111?t=9', text: '正文A', author: 'alice' };
 const POST_B = { url: 'https://x.com/bob/status/222', text: '正文B', author: 'bob' };
