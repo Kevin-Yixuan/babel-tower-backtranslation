@@ -92,6 +92,34 @@ const os = require('node:os');
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.screenshot({ path: path.join(evidence, 'writing-desktop.png'), fullPage: true });
 
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.local.get('settings');
+      await chrome.storage.local.set({ settings: { ...settings, agentBaseUrl: 'http://127.0.0.1:4097' }, agentKey: 'test-token' });
+      globalThis.originalPiFetch = globalThis.fetch;
+      globalThis.originalPiPermission = chrome.permissions.contains;
+      chrome.permissions.contains = async () => true;
+      globalThis.fetch = async url => {
+        if (String(url).endsWith('/health')) return Response.json({ ready: true, version: 'test' });
+        globalThis.piRequestStarted = true;
+        await new Promise(resolve => { globalThis.releasePiReply = resolve; });
+        return Response.json({ answer: '受控助手回复' });
+      };
+    });
+    await page.locator('#agent-prompt').fill('协助修改文稿');
+    await page.locator('#agent-send').click();
+    await page.waitForFunction(() => document.querySelector('#agent-send').textContent === '写作中…');
+    for (let i = 0; i < 50 && !(await worker.evaluate(() => Boolean(globalThis.piRequestStarted))); i++) await page.waitForTimeout(50);
+    assert(await worker.evaluate(() => Boolean(globalThis.piRequestStarted)));
+    await page.locator('#markdown-editor').fill('# 等待助手期间也能保存');
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存', { timeout: 5000 });
+    assert(await worker.evaluate(async () => Object.values((await chrome.storage.local.get('documents')).documents).some(document => document.content === '# 等待助手期间也能保存')));
+    await worker.evaluate(() => globalThis.releasePiReply());
+    await page.waitForFunction(() => document.querySelector('#agent-send').textContent === '发送');
+    await worker.evaluate(() => {
+      globalThis.fetch = globalThis.originalPiFetch;
+      chrome.permissions.contains = globalThis.originalPiPermission;
+    });
+
     await page.goto(`${base}/popup.html`);
     assert.equal(await page.locator('.launch-card').count(), 2);
     await page.screenshot({ path: path.join(evidence, 'launcher.png') });

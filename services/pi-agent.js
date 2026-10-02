@@ -63,7 +63,8 @@ async function documents() {
   return (await storage.get('documents')).documents || {};
 }
 
-let queue = Promise.resolve();
+let documentQueue = Promise.resolve();
+let conversationQueue = Promise.resolve();
 export function agentOp(message) {
   const run = async () => {
     const action = message.action;
@@ -95,7 +96,12 @@ export function agentOp(message) {
     }
     throw new Error('未知写作台操作。');
   };
-  const result = queue.then(run);
-  queue = result.catch(() => {});
+  // Network waits must not hold the document save queue. Conversation mutations
+  // still share a queue so replies retain their order and reset cannot resurrect history.
+  if (message.action === 'AGENT_STATUS' || message.action === 'LIST_AGENT_SESSIONS') return run();
+  const conversation = message.action === 'AGENT_CHAT' || message.action === 'RESET_AGENT_SESSION';
+  const result = (conversation ? conversationQueue : documentQueue).then(run);
+  if (conversation) conversationQueue = result.catch(() => {});
+  else documentQueue = result.catch(() => {});
   return result;
 }
