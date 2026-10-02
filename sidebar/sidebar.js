@@ -57,6 +57,23 @@
   document.documentElement.appendChild(sidebar);
   const body = sidebar.querySelector('#bx-body');
   const tabsEl = sidebar.querySelector('.bx-tabs');
+  tabsEl.setAttribute('role', 'tablist');
+  tabsEl.setAttribute('aria-label', '工作台功能');
+  body.setAttribute('role', 'tabpanel');
+  sidebar.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !event.isComposing && !state.composing) {
+      event.preventDefault(); close(); handle.focus();
+    }
+  });
+  tabsEl.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    const index = registry.findIndex(mod => mod.id === activeId);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? registry.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : -1) + registry.length) % registry.length;
+    if (!registry[next]) return;
+    event.preventDefault(); activeId = registry[next].id; state.mode = activeId; refresh();
+    tabsEl.querySelector(`[data-bx-mode="${activeId}"]`)?.focus();
+  });
   sidebar.querySelector('#bx-settings').onclick = () => send('OPEN_SETTINGS').catch(error => { state.error = error.message; refresh(); });
   sidebar.querySelector('#bx-close').onclick = () => close();
   body.addEventListener('click', event => { if (event.target?.id === 'bx-cancel-request') cancel(); });
@@ -92,7 +109,10 @@
     renderTabs();
   }
   function renderTabs() {
-    tabsEl.innerHTML = registry.map(mod => `<button type="button" data-bx-mode="${esc(mod.id)}" class="${mod.id === activeId ? 'bx-active' : ''}">${esc(mod.label || mod.id)}</button>`).join('');
+    const focused = tabsEl.contains(document.activeElement) ? document.activeElement.dataset.bxMode : '';
+    tabsEl.innerHTML = registry.map(mod => `<button type="button" id="bx-tab-${esc(mod.id)}" role="tab" aria-controls="bx-body" aria-selected="${mod.id === activeId}" tabindex="${mod.id === activeId ? '0' : '-1'}" data-bx-mode="${esc(mod.id)}" class="${mod.id === activeId ? 'bx-active' : ''}">${esc(mod.label || mod.id)}</button>`).join('');
+    body.setAttribute('aria-labelledby', `bx-tab-${activeId}`);
+    if (focused) tabsEl.querySelector(`[data-bx-mode="${focused}"]`)?.focus();
   }
   const activeModule = () => registry.find(mod => mod.id === activeId) || registry[0];
 

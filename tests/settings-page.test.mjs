@@ -195,11 +195,11 @@ function optionIn(select, value, text) {
 
 function buildDocument() {
   const doc = new FakeDocument();
-  for (const tab of ['home', 'filters', 'saved', 'dictionary']) {
+  for (const tab of ['home', 'preferences', 'agent', 'filters', 'saved', 'dictionary', 'data']) {
     const button = element(doc, 'button', { dataset: { tab } });
     if (tab === 'home') button.className = 'active';
   }
-  for (const panel of ['home', 'filters', 'saved', 'dictionary']) {
+  for (const panel of ['home', 'preferences', 'agent', 'filters', 'saved', 'dictionary', 'data']) {
     element(doc, 'section', { dataset: { panel }, hidden: panel !== 'home' });
   }
   element(doc, 'input', { id: 'agent-base-url' });
@@ -208,7 +208,7 @@ function buildDocument() {
   element(doc, 'button', { id: 'test-agent' });
   element(doc, 'div', { id: 'agent-connection' });
   const agentSelect = element(doc, 'select', { id: 'agent-provider' });
-  optionIn(agentSelect, 'ollama'); optionIn(agentSelect, 'opencode');
+  optionIn(agentSelect, 'pi');
   element(doc, 'input', { id: 'provider-label' });
   element(doc, 'input', { id: 'provider-base-url' });
   element(doc, 'input', { id: 'provider-model' });
@@ -243,7 +243,7 @@ function buildDocument() {
   element(doc, 'input', { id: 'session-search', type: 'search' });
   for (const id of ['status', 'rules', 'jev-diagnostics', 'test-result', 'active-config', 'mdx-root',
     'saved-list', 'session-list', 'backup-preview', 'glossary-count', 'threshold-label', 'model-hint',
-    'settings-dirty-status']) {
+    'settings-dirty-status', 'settings-save-hint']) {
     element(doc, id === 'test-result' ? 'span' : 'div', { id });
   }
   return doc;
@@ -464,7 +464,8 @@ test('装配：options.js 引用的元素都在 options.html，且保留弹窗�
   assert.match(html, /id="provider-key" type="password"/);
   assert.equal(/sk-[A-Za-z0-9]/.test(html), false, 'options.html 源码不得含密钥样例');
   // 弹窗尺寸约束已解除；页面不再加载 popup.js
-  assert.match(html, /body\.options-page\{[^}]*max-height:none/);
+  const css = fs.readFileSync(path.join(root, 'popup.css'), 'utf8');
+  assert.match(css, /\.options-page\{[^}]*width:auto/);
   assert.equal(/popup\.js/.test(html), false);
   assert.equal(js.includes('open-settings'), false, 'options.js 不应残留弹窗入口');
   // 页面真实加载并渲染 Flash 建议（只读）
