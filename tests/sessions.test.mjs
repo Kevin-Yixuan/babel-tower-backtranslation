@@ -418,6 +418,12 @@ test('文稿备份冲突保留双方，预览和导入一致，重复导入不�
   assert.equal(repeated.skipped, 2);
   await importBackup(archive);
   assert.equal(Object.keys(store.documents).length, 3);
+  // Chrome storage can return fields in a different order from the archive.
+  store.documents = Object.fromEntries(Object.entries(store.documents).map(([id, item]) =>
+    [id, Object.fromEntries(Object.entries(item).reverse())]));
+  const reordered = await previewBackup(archive);
+  assert.equal(reordered.extra, 0);
+  assert.equal(reordered.skipped, 2);
 });
 
 test('非法文稿和超容量备份在写入前拒绝', async () => {

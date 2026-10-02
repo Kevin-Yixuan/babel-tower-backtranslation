@@ -7,7 +7,7 @@ const keys = ['settings', 'initPrompt', 'documentFolders', ...arrays, ...objects
 // Compare content independently of the identity assigned to a restored copy.
 function documentContent(document) {
   const { id, importedConflict, importedFromId, ...content } = document;
-  return JSON.stringify(content);
+  return JSON.stringify(Object.fromEntries(Object.entries(content).sort(([a], [b]) => a.localeCompare(b))));
 }
 function mergeDocuments(local = {}, incoming = {}, createIds = false) {
   const documents = { ...local };
