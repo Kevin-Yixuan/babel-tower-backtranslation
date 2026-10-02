@@ -1,8 +1,9 @@
 import http from 'node:http';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { runPi } from './process.mjs';
 
 const host = '127.0.0.1';
 const port = 4097;
@@ -16,26 +17,6 @@ const piReady = spawnSync(executable, [...prefix, '--version'], { encoding: 'utf
 function json(response, status, data) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': response.req.headers.origin || 'null', 'Vary': 'Origin' });
   response.end(JSON.stringify(data));
-}
-
-function runPi(prompt, model) {
-  return new Promise((resolve, reject) => {
-    const args = ['--print', '--no-session', '--no-tools', '--no-extensions', '--no-skills', '--no-prompt-templates', '--no-context-files', '--no-approve'];
-    if (model) args.push('--model', model);
-    args.push(prompt);
-    const child = spawn(executable, [...prefix, ...args], { cwd: import.meta.dirname, windowsHide: true, env: process.env });
-    let output = '';
-    let errors = '';
-    const timer = setTimeout(() => child.kill(), 120000);
-    child.stdout.on('data', chunk => { output += chunk; if (output.length > 100000) child.kill(); });
-    child.stderr.on('data', chunk => { errors += chunk; if (errors.length > 10000) child.kill(); });
-    child.on('error', reject);
-    child.on('close', code => {
-      clearTimeout(timer);
-      if (code !== 0) reject(new Error(errors.trim().slice(0, 300) || `Pi exited ${code}`));
-      else resolve(output.trim());
-    });
-  });
 }
 
 http.createServer(async (request, response) => {
@@ -59,10 +40,10 @@ http.createServer(async (request, response) => {
     if (data.prompt.length > 80000) throw new Error('Prompt too long');
     const model = typeof data.model === 'string' && /^[\w./:@+-]{1,120}$/.test(data.model) ? data.model : '';
     if (piReady.status !== 0) throw new Error('Pi CLI unavailable');
-    const answer = await runPi(data.prompt, model);
+    const answer = await runPi({ executable, prefix, prompt: data.prompt, model });
     return json(response, 200, { answer });
   } catch (error) {
-    return json(response, 400, { error: error.message });
+    return json(response, error.code === 'PI_TIMEOUT' ? 504 : error.code?.startsWith('PI_') ? 502 : 400, { error: error.message });
   }
 }).listen(port, host, () => {
   process.stdout.write(`Pi bridge: http://${host}:${port}\nToken: ${token}\n`);
