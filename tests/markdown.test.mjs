@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inlineMarkdown, markdownTitle, renderMarkdown } from '../write/markdown.js';
+import { inlineMarkdown, markdownFilename, markdownTitle, renderMarkdown } from '../write/markdown.js';
 
 test('markdown renderer formats common writing structures', () => {
   const html = renderMarkdown('# 标题\n\n**判断** 与 `术语`\n\n- 第一条\n- 第二条\n\n> 引文');
@@ -41,4 +41,13 @@ test('图片拒绝危险或本地协议，替代文字不会成为 HTML', () => 
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /alt="&lt;script&gt;/);
   assert.doesNotMatch(renderMarkdown('`![code](https://example.com/x.png)`', { allowImages: true }), /<img/);
+});
+
+test('Markdown 下载文件名保留中文，移除非法字符并避开设备名', () => {
+  assert.equal(markdownFilename('我的文稿'), '我的文稿.md');
+  assert.equal(markdownFilename('../文章:<测试>?'), '.._文章__测试__.md');
+  assert.equal(markdownFilename('CON'), '文稿-CON.md');
+  assert.equal(markdownFilename(' LPT1. '), '文稿-LPT1.md');
+  assert.equal(markdownFilename('   '), '未命名文稿.md');
+  assert.equal(markdownFilename('标题.md'), '标题.md');
 });
