@@ -54,20 +54,23 @@ const os = require('node:os');
     const backup = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
       documents: { [localDocument.id]: { ...localDocument, title: '归档稿', content: '归档修改' } }
     } };
-    const uploadBackup = () => page.locator('#import-backup').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    const uploadBackup = async () => {
+      await page.locator('#import-backup').setInputFiles([]);
+      await page.locator('#import-backup').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    };
     await uploadBackup();
     await page.waitForFunction(() => document.querySelector('#backup-preview').textContent.includes('另存 1 项'));
     assert((await page.locator('#backup-preview').textContent()).includes('1 份文稿'));
     assert.equal(await worker.evaluate(async () => Object.keys((await chrome.storage.local.get('documents')).documents).length), 1);
     await page.locator('#confirm-import').click();
-    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('数据已合并'));
+    await page.waitForFunction(() => document.querySelector('#confirm-import').hidden);
     const restored = await worker.evaluate(async () => (await chrome.storage.local.get('documents')).documents);
     assert.equal(restored['restore-a'].content, '本地正文');
     assert(Object.values(restored).some(document => document.content === '归档修改' && document.id !== 'restore-a'));
     await uploadBackup();
     await page.waitForFunction(() => document.querySelector('#backup-preview').textContent.includes('跳过 1 项、另存 0 项'));
     await page.locator('#confirm-import').click();
-    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('数据已合并'));
+    await page.waitForFunction(() => document.querySelector('#confirm-import').hidden);
     assert.equal(await worker.evaluate(async () => Object.keys((await chrome.storage.local.get('documents')).documents).length), 2);
 
     await page.goto(`${base}/write/desk.html`);
