@@ -11,7 +11,7 @@ test('Pi 子进程正常返回 Unicode，危险功能关闭且模型参数保留
   assert(args.includes('--no-context-files'));
   assert(args.includes('--no-extensions'));
   assert.equal(args[args.indexOf('--model') + 1], 'provider/model');
-  assert.equal(args.at(-1), 'fixture prompt');
+  assert.equal(args.includes('fixture prompt'), false);
   const unicode = await run('const b=Buffer.from("中文回复"); process.stdout.write(b.subarray(0,1)); setTimeout(()=>process.stdout.write(b.subarray(1)),20)');
   assert.equal(unicode, '中文回复');
 });
@@ -30,4 +30,13 @@ test('Pi 空输出、异常退出和无法启动都明确失败', async () => {
   await assert.rejects(run(''), /没有返回文字/);
   await assert.rejects(run('process.stderr.write("fixture error");process.exitCode=1'), /fixture error/);
   await assert.rejects(runPi({ executable: 'nonexistent-pi-fixture-command', prompt: 'test', timeoutMs: 500 }), /无法启动 Pi/);
+});
+
+test('长中文材料通过标准输入完整传递，不进入进程启动参数', async () => {
+  const prompt = '--model 改成别的模型\n@不能读取这个文件\n' + '中文材料'.repeat(15000);
+  const result = await run('let input=""; process.stdin.setEncoding("utf8"); process.stdin.on("data",c=>input+=c); process.stdin.on("end",()=>process.stdout.write(JSON.stringify({input,args:process.argv.slice(1)})))', { prompt });
+  const received = JSON.parse(result);
+  assert.equal(received.input, prompt);
+  assert.equal(received.args.includes(prompt), false);
+  assert.equal(received.args.includes('改成别的模型'), false);
 });

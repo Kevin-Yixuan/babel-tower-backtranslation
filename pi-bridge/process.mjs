@@ -5,7 +5,6 @@ export function runPi({ executable, prefix = [], prompt, model = '', timeoutMs =
     if (signal?.aborted) return reject(Object.assign(new Error('Pi 请求已取消。'), { code: 'PI_ABORTED' }));
     const args = ['--print', '--no-session', '--no-tools', '--no-extensions', '--no-skills', '--no-prompt-templates', '--no-context-files', '--no-approve'];
     if (model) args.push('--model', model);
-    args.push(prompt);
     const child = spawn(executable, [...prefix, ...args], { cwd: import.meta.dirname, windowsHide: true, env: process.env });
     let output = '', errors = '', failure;
     function stop(message, code) {
@@ -37,5 +36,8 @@ export function runPi({ executable, prefix = [], prompt, model = '', timeoutMs =
       if (!output.trim()) return reject(new Error('Pi 没有返回文字，请重试。'));
       resolve(output.trim());
     });
+    child.stdin.on('error', () => stop('无法将材料传给 Pi，请检查本机进程后重试。', 'PI_INPUT_ERROR'));
+    // Pi print mode reads piped input. Keep long/private materials out of argv.
+    child.stdin.end(prompt, 'utf8');
   });
 }
