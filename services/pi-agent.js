@@ -82,7 +82,16 @@ export function agentOp(message) {
     if (action === 'SAVE_DOCUMENT') {
       const all = await documents();
       const previous = all[clean(message.payload?.id, 80)] || {};
-      const document = normalizeDocument(message.payload, previous);
+      let document = normalizeDocument(message.payload, previous);
+      const contentFields = ['title', 'content', 'folder', 'kind', 'sourceUrl'];
+      if (previous.id && contentFields.every(field => document[field] === previous[field])) return previous;
+      const expected = message.payload?.expectedRevision;
+      if (expected !== undefined && (!Number.isSafeInteger(expected) || expected < 0)) throw new Error('文稿版本无效，请重新打开文稿。');
+      if (expected !== undefined && (!previous.id || expected !== (previous.revision || 0))) {
+        const originalId = document.id;
+        document = normalizeDocument({ ...document, id: crypto.randomUUID(), title: `${document.title.slice(0, 90)}（冲突副本）` }, { ...previous, revision: 0, createdAt: new Date().toISOString() });
+        document.conflictOf = originalId;
+      }
       all[document.id] = document;
       if (Object.keys(all).length > 200) throw new Error('文稿数量超过 200 份，请先整理资料库。');
       await storage.set({ documents: all });

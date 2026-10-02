@@ -119,6 +119,26 @@ const os = require('node:os');
     assert(await worker.evaluate(async () => Object.values((await chrome.storage.local.get('documents')).documents).some(document => document.content === '# 快捷键立即保存')));
     await page.setViewportSize({ width: 1440, height: 1000 });
 
+    const originalDocumentId = new URL(page.url()).searchParams.get('doc');
+    const secondWindow = await context.newPage();
+    await secondWindow.goto(page.url());
+    await secondWindow.waitForFunction(() => document.querySelector('#markdown-editor').value === '# 快捷键立即保存');
+    await page.locator('#markdown-editor').fill('# 窗口 A 修改');
+    await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    await secondWindow.locator('#markdown-editor').fill('# 窗口 B 修改');
+    await secondWindow.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    const copyId = new URL(secondWindow.url()).searchParams.get('doc');
+    assert.notEqual(copyId, originalDocumentId);
+    const copies = await worker.evaluate(async () => (await chrome.storage.local.get('documents')).documents);
+    assert.equal(copies[originalDocumentId].content, '# 窗口 A 修改');
+    assert.equal(copies[copyId].content, '# 窗口 B 修改');
+    assert((await secondWindow.locator('#doc-title').inputValue()).includes('冲突副本'));
+    await secondWindow.locator('#markdown-editor').fill('# 窗口 B 继续修改');
+    await secondWindow.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');
+    assert.equal(new URL(secondWindow.url()).searchParams.get('doc'), copyId);
+    assert.equal(await worker.evaluate(async id => (await chrome.storage.local.get('documents')).documents[id].content, copyId), '# 窗口 B 继续修改');
+    await secondWindow.close();
+
     await worker.evaluate(async () => {
       const { settings } = await chrome.storage.local.get('settings');
       await chrome.storage.local.set({ settings: { ...settings, agentBaseUrl: 'http://127.0.0.1:4097' }, agentKey: 'test-token' });
