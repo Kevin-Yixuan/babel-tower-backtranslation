@@ -44,6 +44,7 @@ const state = {
   lastAnswer: '',
   lastSelection: { start: 0, end: 0 },
   busy: false,
+  loading: true,
   saveTimer: 0,
   toastTimer: 0
 };
@@ -60,6 +61,14 @@ function toast(message, error = false) {
 function setSaveState(text) {
   $('#save-state').textContent = text;
   $('#retry-save').hidden = text !== '保存失败';
+}
+function setStartupLoading(loading) {
+  state.loading = loading;
+  document.body.setAttribute('aria-busy', String(loading));
+  for (const id of ['doc-title', 'markdown-editor', 'new-document', 'quick-note', 'new-reference', 'new-folder', 'move-document', 'delete-document', 'download-markdown', 'copy-markdown', 'copy-rich-x', 'agent-prompt', 'agent-reset']) {
+    $('#' + id).disabled = loading;
+  }
+  document.querySelectorAll('[data-prompt], [data-document-id]').forEach(button => { button.disabled = loading; });
 }
 
 function currentContent() {
@@ -151,6 +160,7 @@ function renderDocumentList() {
     return `<details class="folder-group" open><summary>▸ ${escapeHTML(folder)} <small>${items.length}</small></summary>${items.map(document => `<button class="document-card ${document.id === state.document?.id ? 'active' : ''}" data-document-id="${escapeHTML(document.id)}"><b>${document.kind === 'reference' ? '▤ ' : '✎ '}${escapeHTML(document.title)}</b><span>${escapeHTML(document.excerpt || '空白文稿')}</span><small>${new Date(document.updatedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric' })} · ${document.size || 0} 字符</small></button>`).join('')}</details>`;
   }).join('') || '<div class="library-empty">没有找到文稿。</div>';
   list.querySelectorAll('[data-document-id]').forEach(button => button.onclick = () => openDocument(button.dataset.documentId));
+  list.querySelectorAll('[data-document-id]').forEach(button => { button.disabled = state.loading; });
 }
 
 async function loadAgentForDocument(documentId) {
@@ -415,6 +425,7 @@ chrome.runtime.onMessage?.addListener((message, sender, respond) => {
 });
 
 try {
+  setStartupLoading(true);
   state.folders = [...new Set([...state.folders, ...((await chrome.storage.local.get('documentFolders')).documentFolders || [])])];
   await loadDocumentList();
   const requested = new URLSearchParams(location.search).get('doc');
@@ -422,9 +433,13 @@ try {
   if (requested) opened = await openDocument(requested);
   if (!opened && state.documents[0]) opened = await openDocument(state.documents[0].id);
   if (!opened) await createDocument('# 新文稿\n\n从一个明确判断开始。');
+  setStartupLoading(false);
+  setSaveState('已保存');
   await refreshAgentStatus();
   document.body.dataset.ready = '1';
 } catch (error) {
+  setStartupLoading(true);
+  document.body.setAttribute('aria-busy', 'false');
   document.body.dataset.ready = 'error';
   $('#markdown-editor').disabled = true;
   $('#markdown-editor').placeholder = '文稿没有成功加载，请刷新页面重试。';

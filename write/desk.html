@@ -11,7 +11,7 @@
   <div class="app-shell">
     <header class="topbar">
       <div class="brand"><span class="logo">回</span><div><b>自由写作台</b><small>Markdown 文稿 + 开源 Agent</small></div></div>
-      <div class="document-title"><input id="doc-title" value="未命名文稿" maxlength="100" aria-label="文稿标题"><span id="save-state" role="status" aria-live="polite">已保存</span></div>
+      <div class="document-title"><input id="doc-title" value="未命名文稿" maxlength="100" aria-label="文稿标题" disabled><span id="save-state" role="status" aria-live="polite">加载中…</span></div>
       <div class="top-actions">
         <button id="retry-save" hidden>重试保存</button>
         <button class="pane-toggle" data-pane="library" aria-controls="writing-library" aria-expanded="false">文稿库</button><button class="pane-toggle" data-pane="agent" aria-controls="writing-agent" aria-expanded="false">写作助手</button>
@@ -41,7 +41,7 @@
       </div>
       <div id="editor-layout" class="editor-layout view-write">
         <section class="editor-pane" aria-label="Markdown 编辑器">
-          <textarea id="markdown-editor" spellcheck="true" placeholder="# 从一个明确判断开始
+          <textarea id="markdown-editor" spellcheck="true" disabled placeholder="# 从一个明确判断开始
 
 写下你的观点，或把右侧 Agent 的结果写入这里……"></textarea>
         </section>
