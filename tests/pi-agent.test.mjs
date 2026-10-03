@@ -136,3 +136,32 @@ test('超长组合上下文在请求前拒绝，合法上下文使用实际换�
     assert.equal(prompt.includes('\\n'), false);
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test('特殊记录 ID 按普通文稿处理，不读取对象继承属性', async () => {
+  assert.equal(await agentOp({ action: 'GET_DOCUMENT', id: 'constructor' }), null);
+  for (const id of ['__proto__', 'constructor', 'toString']) {
+    const document = await agentOp({ action: 'SAVE_DOCUMENT', payload: { id, content: `文稿 ${id}` } });
+    assert.equal(document.id, id);
+    const loaded = await agentOp({ action: 'GET_DOCUMENT', id });
+    assert.equal(loaded.content, document.content);
+    assert.equal(loaded.revision, 1);
+  }
+  const listed = await agentOp({ action: 'LIST_DOCUMENTS' });
+  assert(listed.some(item => item.id === '__proto__'));
+  assert.equal({}.content, undefined);
+});
+
+test('特殊会话 ID 保持自己的历史，不生成错误的 undefined 会话', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({ answer: '完整回复' });
+  try {
+    for (const id of ['__proto__', 'constructor', 'toString']) {
+      const first = await agentOp({ action: 'AGENT_CHAT', payload: { sessionId: id, message: '第一次' } });
+      assert.equal(first.session.id, id);
+      const second = await agentOp({ action: 'AGENT_CHAT', payload: { sessionId: id, message: '第二次' } });
+      assert.equal(second.session.messages.length, 4);
+      assert.equal(store.agentSessions[id].id, id);
+    }
+    assert.equal(Object.hasOwn(store.agentSessions, 'undefined'), false);
+  } finally { globalThis.fetch = originalFetch; }
+});

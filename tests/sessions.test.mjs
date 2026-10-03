@@ -465,6 +465,22 @@ test('备份导入和文稿保存同时发生，不覆盖导入期间的编辑',
   assert.equal(store.documents[incoming.id].content, '归档内容');
 });
 
+test('备份中的特殊文稿 ID 正常导入，不误判为已有记录', async () => {
+  await removeAllSessions();
+  const store = installChromeMock({ documents: {} });
+  const documents = Object.fromEntries(['__proto__', 'constructor', 'toString'].map(id => [id, { id, title: id, content: '归档文稿', folder: '我的文章' }]));
+  const archive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: { documents } };
+  const preview = await previewBackup(archive);
+  assert.equal(preview.imported, 3);
+  assert.equal(preview.extra, 0);
+  await importBackup(archive);
+  for (const id of Object.keys(documents)) {
+    assert(Object.hasOwn(store.documents, id));
+    assert.equal(store.documents[id].id, id);
+  }
+  assert.equal({}.content, undefined);
+});
+
 const POST_A = { url: 'https://x.com/alice/status/111?s=20', text: '正文A', author: 'alice' };
 const POST_A_VARIANT = { url: 'https://x.com/i/status/111?t=9', text: '正文A', author: 'alice' };
 const POST_B = { url: 'https://x.com/bob/status/222', text: '正文B', author: 'bob' };
