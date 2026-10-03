@@ -97,6 +97,21 @@ const os = require('node:os');
     await page.waitForFunction(() => document.querySelector('#confirm-import').hidden);
     assert.equal(await worker.evaluate(async () => (await chrome.storage.local.get('writingDrafts')).writingDrafts.length), 2);
 
+    const sessionArchive = { format: 'babel-tower-backup', version: 1, storage: {}, sessions: [
+      { key: 'post:31313', data: { draft: '归档第一版' } },
+      { key: 'post:31313', data: { draft: '归档第二版' } },
+      { key: 'post:31313', data: { draft: '归档第二版' } }
+    ] };
+    const sessionPreview = await page.evaluate(archive => chrome.runtime.sendMessage({ action: 'BACKUP', payload: { op: 'preview', archive } }), sessionArchive);
+    assert.deepEqual([sessionPreview.data.imported, sessionPreview.data.extra, sessionPreview.data.skipped], [1, 1, 1]);
+    const sessionImport = await page.evaluate(archive => chrome.runtime.sendMessage({ action: 'BACKUP', payload: { op: 'import', archive } }), sessionArchive);
+    assert.equal(sessionImport.ok, true);
+    const sessionExport = await page.evaluate(() => chrome.runtime.sendMessage({ action: 'BACKUP', payload: { op: 'export' } }));
+    assert(sessionExport.data.sessions.some(item => item.data.draft === '归档第一版'));
+    assert(sessionExport.data.sessions.some(item => item.data.draft === '归档第二版'));
+    const sessionRepeat = await page.evaluate(archive => chrome.runtime.sendMessage({ action: 'BACKUP', payload: { op: 'import', archive } }), sessionArchive);
+    assert.deepEqual([sessionRepeat.data.imported, sessionRepeat.data.extra, sessionRepeat.data.skipped], [0, 0, 3]);
+
     await page.goto(`${base}/write/desk.html`);
     await page.locator('#markdown-editor').fill('# 保留我的草稿\n\n切换侧栏也不会丢失。');
     await page.waitForFunction(() => document.querySelector('#save-state').textContent === '已保存');

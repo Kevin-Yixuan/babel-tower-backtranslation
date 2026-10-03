@@ -503,6 +503,29 @@ test('重复草稿与文件夹的导入预览一致，重试不再产生冲突�
   assert.equal(store.writingDrafts.length, 3);
 });
 
+test('归档内同帖不同版本均保留，重复版本跳过，重复导入不增加会话副本', async () => {
+  await removeAllSessions();
+  installChromeMock({});
+  const archive = { format: 'babel-tower-backup', version: 1, storage: {}, sessions: [
+    { key: 'post:31313', data: { draft: '归档第一版' } },
+    { key: 'post:31313', data: { draft: '归档第二版' } },
+    { key: 'post:31313', data: { draft: '归档第二版' } }
+  ] };
+  const preview = await previewBackup(archive);
+  assert.deepEqual([preview.imported, preview.extra, preview.skipped], [1, 1, 1]);
+  const result = await importBackup(archive);
+  assert.deepEqual([result.imported, result.extra, result.skipped], [1, 1, 1]);
+  const records = await sessionOp({ op: 'list' });
+  assert.equal(records.length, 2);
+  assert(records.some(item => item.data.draft === '归档第一版'));
+  assert(records.some(item => item.data.draft === '归档第二版'));
+  const again = await previewBackup(archive);
+  assert.deepEqual([again.imported, again.extra, again.skipped], [0, 0, 3]);
+  await importBackup(archive);
+  assert.equal((await sessionOp({ op: 'list' })).length, 2);
+  await removeAllSessions();
+});
+
 const POST_A = { url: 'https://x.com/alice/status/111?s=20', text: '正文A', author: 'alice' };
 const POST_A_VARIANT = { url: 'https://x.com/i/status/111?t=9', text: '正文A', author: 'alice' };
 const POST_B = { url: 'https://x.com/bob/status/222', text: '正文B', author: 'bob' };
