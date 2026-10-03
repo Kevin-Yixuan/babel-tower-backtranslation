@@ -111,3 +111,12 @@ export function renderMarkdown(source, options = {}) {
 export function markdownTitle(source) {
   return String(source || '').match(/^#\s+(.+)$/m)?.[1]?.trim().slice(0, 100) || '';
 }
+
+export function markdownFilename(title) {
+  let name = String(title || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim()
+    .replace(/[. ]+$/, '').replace(/\.md$/i, '').replace(/[. ]+$/, '').slice(0, 80)
+    .replace(/[\uD800-\uDBFF]$/, '');
+  if (!name) name = '未命名文稿';
+  if (/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) name = '文稿-' + name;
+  return name + '.md';
+}

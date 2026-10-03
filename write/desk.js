@@ -1,4 +1,4 @@
-import { markdownTitle, renderMarkdown } from './markdown.js';
+import { markdownFilename, markdownTitle, renderMarkdown } from './markdown.js';
 
 const $ = selector => document.querySelector(selector);
 // Small windows keep the editor usable; drawers never recreate the document or chat.
@@ -358,6 +358,17 @@ $('#delete-document').onclick = deleteCurrentDocument;
 $('#copy-markdown').onclick = async () => {
   try { await navigator.clipboard.writeText(currentContent()); toast('Markdown 已复制。'); }
   catch { toast('复制失败，请在编辑区手动全选。', true); }
+};
+$('#download-markdown').onclick = () => {
+  const url = URL.createObjectURL(new Blob([currentContent()], { type: 'text/markdown;charset=utf-8' }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = markdownFilename(currentTitle());
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  toast('已开始下载当前编辑内容。');
 };
 $('#copy-rich-x').onclick = async () => {
   try {
