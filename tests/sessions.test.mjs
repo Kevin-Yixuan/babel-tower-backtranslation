@@ -440,6 +440,31 @@ test('非法文稿和超容量备份在写入前拒绝', async () => {
   assert.equal(JSON.stringify(store), before);
 });
 
+test('备份导入和文稿保存同时发生，不覆盖导入期间的编辑', async () => {
+  await removeAllSessions();
+  const local = { id: 'race-local', title: '本地稿', content: '旧内容', folder: '我的文章', kind: 'draft', sourceUrl: '', revision: 1 };
+  const incoming = { id: 'race-import', title: '归档稿', content: '归档内容', folder: '我的文章' };
+  const store = installChromeMock({ documents: { [local.id]: local } });
+  const { agentOp } = await import('../services/pi-agent.js?backup-race-test');
+  const set = chrome.storage.local.set;
+  let started, release, held = false;
+  const pending = new Promise(resolve => { release = resolve; });
+  const reachedWrite = new Promise(resolve => { started = resolve; });
+  chrome.storage.local.set = async values => {
+    if (!held && values.documents?.[incoming.id]) { held = true; started(); await pending; }
+    return set(values);
+  };
+  const importing = importBackup({ format: 'babel-tower-backup', version: 1, sessions: [], storage: { documents: { [incoming.id]: incoming } } });
+  let saving;
+  try {
+    await reachedWrite;
+    saving = agentOp({ action: 'SAVE_DOCUMENT', payload: { ...local, content: '导入期间的新编辑', expectedRevision: 1 } });
+    await sleep(20);
+  } finally { release(); await importing; if (saving) await saving; }
+  assert.equal(store.documents[local.id].content, '导入期间的新编辑');
+  assert.equal(store.documents[incoming.id].content, '归档内容');
+});
+
 const POST_A = { url: 'https://x.com/alice/status/111?s=20', text: '正文A', author: 'alice' };
 const POST_A_VARIANT = { url: 'https://x.com/i/status/111?t=9', text: '正文A', author: 'alice' };
 const POST_B = { url: 'https://x.com/bob/status/222', text: '正文B', author: 'bob' };
