@@ -1,5 +1,6 @@
 import { sessionOp } from './sessions.js';
 import { normalizeSettings, validateProviders } from './settings.js';
+import { withContentStorage } from './content-storage.js';
 const arrays = ['writingDrafts', 'cards', 'growthMemories', 'savedPhrases'];
 const objects = ['growthSettings', 'discoveryPrefs', 'readingPrefs', 'glossary', 'documents', 'agentSessions'];
 const keys = ['settings', 'initPrompt', 'documentFolders', ...arrays, ...objects];
@@ -106,7 +107,10 @@ export async function previewBackup(archive) {
   return { ...counts, ...await planImport(archive) };
 }
 
-export async function importBackup(archive) {
+export function importBackup(archive) {
+  return withContentStorage(() => performImport(archive));
+}
+async function performImport(archive) {
   const counts = validateBackup(archive);
   archive = structuredClone(archive);
   if (archive.storage.agentSessions) archive.storage.agentSessions = cleanAgentSessions(archive.storage.agentSessions);

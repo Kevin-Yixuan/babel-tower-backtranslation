@@ -1,4 +1,5 @@
 import { agentContextBlock, clampAgentHistory, normalizeDocument, safeAgentEndpoint } from './agent-data.js';
+import { withContentStorage } from './content-storage.js';
 
 const storage = chrome.storage.local;
 const clean = (value, max) => String(value ?? '').trim().slice(0, max);
@@ -56,10 +57,12 @@ async function chat(payload) {
     { role: 'assistant', content: answer, createdAt: now }
   ].slice(-24);
   const session = { ...previous, provider: 'pi', baseUrl: url, model, messages, updatedAt: now };
-  const current = (await storage.get('agentSessions')).agentSessions || {};
-  current[id] = session;
-  const kept = Object.values(current).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 20);
-  await storage.set({ agentSessions: Object.fromEntries(kept.map(item => [item.id, item])) });
+  await withContentStorage(async () => {
+    const current = (await storage.get('agentSessions')).agentSessions || {};
+    current[id] = session;
+    const kept = Object.values(current).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 20);
+    await storage.set({ agentSessions: Object.fromEntries(kept.map(item => [item.id, item])) });
+  });
   return { session, answer, runtime: { provider: 'pi', model } };
 }
 
@@ -67,7 +70,6 @@ async function documents() {
   return (await storage.get('documents')).documents || {};
 }
 
-let documentQueue = Promise.resolve();
 let conversationQueue = Promise.resolve();
 export function agentOp(message) {
   const run = async () => {
@@ -76,9 +78,11 @@ export function agentOp(message) {
     if (action === 'AGENT_CHAT') return chat(message.payload || {});
     if (action === 'LIST_AGENT_SESSIONS') return Object.values((await storage.get('agentSessions')).agentSessions || {}).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
     if (action === 'RESET_AGENT_SESSION') {
-      const all = (await storage.get('agentSessions')).agentSessions || {};
-      delete all[clean(message.sessionId, 80)];
-      await storage.set({ agentSessions: all });
+      await withContentStorage(async () => {
+        const all = (await storage.get('agentSessions')).agentSessions || {};
+        delete all[clean(message.sessionId, 80)];
+        await storage.set({ agentSessions: all });
+      });
       return { removed: true };
     }
     if (action === 'LIST_DOCUMENTS') return Object.values(await documents()).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).map(({ content, ...meta }) => ({ ...meta, excerpt: content.slice(0, 140), size: content.length }));
@@ -113,8 +117,8 @@ export function agentOp(message) {
   // still share a queue so replies retain their order and reset cannot resurrect history.
   if (message.action === 'AGENT_STATUS' || message.action === 'LIST_AGENT_SESSIONS') return run();
   const conversation = message.action === 'AGENT_CHAT' || message.action === 'RESET_AGENT_SESSION';
-  const result = (conversation ? conversationQueue : documentQueue).then(run);
-  if (conversation) conversationQueue = result.catch(() => {});
-  else documentQueue = result.catch(() => {});
+  if (!conversation) return withContentStorage(run);
+  const result = conversationQueue.then(run);
+  conversationQueue = result.catch(() => {});
   return result;
 }
