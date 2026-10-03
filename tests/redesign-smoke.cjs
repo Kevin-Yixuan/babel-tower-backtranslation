@@ -78,6 +78,24 @@ const os = require('node:os');
     const specialRead = await page.evaluate(() => chrome.runtime.sendMessage({ action: 'GET_DOCUMENT', id: '__proto__' }));
     assert.equal(specialRead.data.content, '真实存储中的文稿');
     await page.evaluate(() => chrome.runtime.sendMessage({ action: 'DELETE_DOCUMENT', id: '__proto__' }));
+    await worker.evaluate(() => chrome.storage.local.set({ writingDrafts: [{ id: 'dedup-a', text: '本地稿' }] }));
+    const duplicateArchive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
+      writingDrafts: [{ id: 'dedup-a', text: '归档修改' }, { id: 'dedup-a', text: '归档修改' }]
+    } };
+    const uploadDuplicates = async () => {
+      await page.locator('#import-backup').setInputFiles([]);
+      await page.locator('#import-backup').setInputFiles({ name: 'duplicates.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(duplicateArchive)) });
+    };
+    await uploadDuplicates();
+    await page.waitForFunction(() => document.querySelector('#backup-preview').textContent.includes('跳过 1 项、另存 1 项'));
+    await page.locator('#confirm-import').click();
+    await page.waitForFunction(() => document.querySelector('#confirm-import').hidden);
+    assert.equal(await worker.evaluate(async () => (await chrome.storage.local.get('writingDrafts')).writingDrafts.length), 2);
+    await uploadDuplicates();
+    await page.waitForFunction(() => document.querySelector('#backup-preview').textContent.includes('跳过 2 项、另存 0 项'));
+    await page.locator('#confirm-import').click();
+    await page.waitForFunction(() => document.querySelector('#confirm-import').hidden);
+    assert.equal(await worker.evaluate(async () => (await chrome.storage.local.get('writingDrafts')).writingDrafts.length), 2);
 
     await page.goto(`${base}/write/desk.html`);
     await page.locator('#markdown-editor').fill('# 保留我的草稿\n\n切换侧栏也不会丢失。');

@@ -7,11 +7,30 @@ const objects = ['growthSettings', 'discoveryPrefs', 'readingPrefs', 'glossary',
 const keys = ['settings', 'initPrompt', 'documentFolders', ...arrays, ...objects];
 
 // Compare content independently of the identity assigned to a restored copy.
+function stableValue(value) {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, stableValue(value[key])]));
+  return value;
+}
 function documentContent(document) {
   const { id, importedConflict, importedFromId, ...content } = document;
-  return JSON.stringify(Object.fromEntries(Object.entries(content).sort(([a], [b]) => a.localeCompare(b))));
+  return JSON.stringify(stableValue(content));
 }
-function mergeDocuments(local = {}, incoming = {}, createIds = false) {
+function mergeRecords(local = [], incoming = []) {
+  const records = [...local];
+  let imported = 0, skipped = 0, extra = 0;
+  for (const item of incoming) {
+    const duplicate = records.some(record => JSON.stringify(stableValue(record)) === JSON.stringify(stableValue(item))
+      || (item.id && record.importedFromId === item.id && documentContent(record) === documentContent(item)));
+    if (duplicate) { skipped++; continue; }
+    if (item.id && records.some(record => record.id === item.id)) {
+      records.push({ ...item, id: crypto.randomUUID(), importedConflict: true, importedFromId: item.id });
+      extra++;
+    } else { records.push(item); imported++; }
+  }
+  return { records, imported, skipped, extra };
+}
+function mergeDocuments(local = {}, incoming = {}) {
   const documents = ownRecordMap(local);
   let imported = 0, skipped = 0, extra = 0;
   for (const [id, document] of Object.entries(incoming)) {
@@ -21,7 +40,7 @@ function mergeDocuments(local = {}, incoming = {}, createIds = false) {
     if (duplicate) { skipped++; continue; }
     if (existing) {
       extra++;
-      const copyId = createIds ? crypto.randomUUID() : `preview_${extra}_${id}`;
+      const copyId = crypto.randomUUID();
       documents[copyId] = { ...document, id: copyId, importedConflict: true, importedFromId: id };
     } else { imported++; documents[id] = document; }
   }
@@ -63,12 +82,8 @@ async function planImport(archive) {
   let imported = 0, skipped = 0, extra = 0;
   for (const name of arrays) {
     if (!archive.storage[name]) continue;
-    const local = old[name] || [];
-    for (const item of archive.storage[name]) {
-      if (local.some(x => JSON.stringify(x) === JSON.stringify(item))) skipped++;
-      else if (item?.id && local.some(x => x.id === item.id)) extra++;
-      else imported++;
-    }
+    const plan = mergeRecords(old[name], archive.storage[name]);
+    imported += plan.imported; skipped += plan.skipped; extra += plan.extra;
   }
   for (const name of objects) if (archive.storage[name]) {
     if (name === 'documents') {
@@ -80,10 +95,11 @@ async function planImport(archive) {
       if (old[name] && Object.hasOwn(old[name], field)) skipped++; else imported++;
     }
   }
+  const folders = new Set(old.documentFolders || []);
   for (const folder of archive.storage.documentFolders || []) {
-    if ((old.documentFolders || []).includes(folder)) skipped++; else imported++;
+    if (folders.has(folder)) skipped++; else { imported++; folders.add(folder); }
   }
-  if (archive.storage.initPrompt !== undefined) { if (old.initPrompt) skipped++; else imported++; }
+  if (archive.storage.initPrompt) { if (old.initPrompt) skipped++; else imported++; }
   if (archive.storage.settings) {
     const incoming = validateProviders(normalizeSettings(archive.storage.settings).providers);
     const current = normalizeSettings(old.settings || {}).providers;
@@ -120,16 +136,10 @@ async function performImport(archive) {
   const next = {};
   for (const name of arrays) {
     if (!archive.storage[name]) continue;
-    const merged = [...(old[name] || [])];
-    for (const item of archive.storage[name]) {
-      if (merged.some(x => JSON.stringify(x) === JSON.stringify(item))) continue;
-      const collision = item.id && merged.some(x => x.id === item.id);
-      merged.push(collision ? { ...item, id: crypto.randomUUID(), importedConflict: true } : item);
-    }
-    next[name] = merged;
+    next[name] = mergeRecords(old[name], archive.storage[name]).records;
   }
   for (const name of objects) if (archive.storage[name]) next[name] = name === 'documents'
-    ? mergeDocuments(old.documents, archive.storage.documents, true).documents
+    ? mergeDocuments(old.documents, archive.storage.documents).documents
     : { ...archive.storage[name], ...(old[name] || {}) };
   if (archive.storage.documentFolders) next.documentFolders = [...new Set([...(old.documentFolders || []), ...archive.storage.documentFolders])];
   if (!old.initPrompt && archive.storage.initPrompt) next.initPrompt = archive.storage.initPrompt;
