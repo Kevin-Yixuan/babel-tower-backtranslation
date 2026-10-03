@@ -1,26 +1,21 @@
-import { sessionOp } from './sessions.js';
+import { planSessionImport, sessionOp } from './sessions.js';
 import { normalizeSettings, validateProviders } from './settings.js';
 import { withContentStorage } from './content-storage.js';
-import { ownRecordMap } from './agent-data.js';
+import { ownRecordMap, stableJson } from './agent-data.js';
 const arrays = ['writingDrafts', 'cards', 'growthMemories', 'savedPhrases'];
 const objects = ['growthSettings', 'discoveryPrefs', 'readingPrefs', 'glossary', 'documents', 'agentSessions'];
 const keys = ['settings', 'initPrompt', 'documentFolders', ...arrays, ...objects];
 
 // Compare content independently of the identity assigned to a restored copy.
-function stableValue(value) {
-  if (Array.isArray(value)) return value.map(stableValue);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, stableValue(value[key])]));
-  return value;
-}
 function documentContent(document) {
   const { id, importedConflict, importedFromId, ...content } = document;
-  return JSON.stringify(stableValue(content));
+  return stableJson(content);
 }
 function mergeRecords(local = [], incoming = []) {
   const records = [...local];
   let imported = 0, skipped = 0, extra = 0;
   for (const item of incoming) {
-    const duplicate = records.some(record => JSON.stringify(stableValue(record)) === JSON.stringify(stableValue(item))
+    const duplicate = records.some(record => stableJson(record) === stableJson(item)
       || (item.id && record.importedFromId === item.id && documentContent(record) === documentContent(item)));
     if (duplicate) { skipped++; continue; }
     if (item.id && records.some(record => record.id === item.id)) {
@@ -78,7 +73,6 @@ export function validateBackup(archive) {
 async function planImport(archive) {
   const old = await chrome.storage.local.get(keys);
   const localSessions = await sessionOp({ op: 'list' });
-  const byKey = new Map(localSessions.map(item => [item.key, item]));
   let imported = 0, skipped = 0, extra = 0;
   for (const name of arrays) {
     if (!archive.storage[name]) continue;
@@ -109,12 +103,8 @@ async function planImport(archive) {
       else skipped++;
     }
   }
-  for (const item of archive.sessions) {
-    const existing = byKey.get(item.key);
-    if (!existing) imported++;
-    else if (JSON.stringify(existing.data) === JSON.stringify(item.data)) skipped++;
-    else extra++;
-  }
+  const sessionPlan = planSessionImport(localSessions, archive.sessions);
+  imported += sessionPlan.imported; skipped += sessionPlan.skipped; extra += sessionPlan.extra;
   return { imported, skipped, extra };
 }
 
