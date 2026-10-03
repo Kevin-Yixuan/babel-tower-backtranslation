@@ -42,6 +42,19 @@ function mergeDocuments(local = {}, incoming = {}) {
   if (Object.keys(documents).length > 200) throw new Error('合并后文稿超过 200 份，请先整理文稿库再导入。');
   return { documents, imported, skipped, extra };
 }
+function mergeSettings(currentRaw, incomingRaw) {
+  const incoming = normalizeSettings(incomingRaw), current = normalizeSettings(currentRaw || {});
+  const providers = { ...current.providers };
+  let imported = 0, skipped = 0, extra = 0;
+  for (const [id, config] of Object.entries(validateProviders(incoming.providers))) {
+    if (!Object.hasOwn(currentRaw?.providers || {}, id)) { providers[id] = config; imported++; }
+    else if (stableJson(providers[id]) === stableJson(config)
+      || Object.entries(providers).some(([key, value]) => key.startsWith('import_') && stableJson(value) === stableJson(config))) skipped++;
+    else { providers['import_' + crypto.randomUUID()] = config; extra++; }
+  }
+  if (Object.keys(providers).length > 40) throw new Error('合并后模型配置超过 40 组，请先整理配置再导入。');
+  return { settings: { ...(currentRaw ? current : incoming), providers }, imported, skipped, extra };
+}
 
 export async function exportBackup() {
   const stored = await chrome.storage.local.get(keys);
@@ -95,13 +108,8 @@ async function planImport(archive) {
   }
   if (archive.storage.initPrompt) { if (old.initPrompt) skipped++; else imported++; }
   if (archive.storage.settings) {
-    const incoming = validateProviders(normalizeSettings(archive.storage.settings).providers);
-    const current = normalizeSettings(old.settings || {}).providers;
-    for (const [id, config] of Object.entries(incoming)) {
-      if (!old.settings?.providers?.[id]) imported++;
-      else if (JSON.stringify(current[id]) !== JSON.stringify(config)) extra++;
-      else skipped++;
-    }
+    const plan = mergeSettings(old.settings, archive.storage.settings);
+    imported += plan.imported; skipped += plan.skipped; extra += plan.extra;
   }
   const sessionPlan = planSessionImport(localSessions, archive.sessions);
   imported += sessionPlan.imported; skipped += sessionPlan.skipped; extra += sessionPlan.extra;
@@ -134,13 +142,7 @@ async function performImport(archive) {
   if (archive.storage.documentFolders) next.documentFolders = [...new Set([...(old.documentFolders || []), ...archive.storage.documentFolders])];
   if (!old.initPrompt && archive.storage.initPrompt) next.initPrompt = archive.storage.initPrompt;
   if (archive.storage.settings) {
-    const incoming = normalizeSettings(archive.storage.settings), current = normalizeSettings(old.settings || {});
-    const providers = { ...current.providers };
-    for (const [id, config] of Object.entries(validateProviders(incoming.providers))) {
-      if (!old.settings?.providers?.[id]) providers[id] = config;
-      else if (JSON.stringify(providers[id]) !== JSON.stringify(config)) providers['import_' + crypto.randomUUID()] = config;
-    }
-    next.settings = { ...(old.settings ? current : incoming), providers };
+    next.settings = mergeSettings(old.settings, archive.storage.settings).settings;
     // API keys are never accepted from the archive; existing local keys are untouched.
   }
   // Session import validates everything and commits atomically first. If local storage

@@ -111,6 +111,18 @@ const os = require('node:os');
     assert(sessionExport.data.sessions.some(item => item.data.draft === '归档第二版'));
     const sessionRepeat = await page.evaluate(archive => chrome.runtime.sendMessage({ action: 'BACKUP', payload: { op: 'import', archive } }), sessionArchive);
     assert.deepEqual([sessionRepeat.data.imported, sessionRepeat.data.extra, sessionRepeat.data.skipped], [0, 0, 3]);
+    const localSettings = await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings);
+    const providerArchive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
+      settings: { ...localSettings, providers: { ...localSettings.providers,
+        openai: { ...localSettings.providers.openai, model: 'archive-model' } } }
+    } };
+    await page.evaluate(archive => chrome.runtime.sendMessage({ action: 'BACKUP', payload: { op: 'import', archive } }), providerArchive);
+    const providerKeys = await worker.evaluate(async () => Object.keys((await chrome.storage.local.get('settings')).settings.providers).sort());
+    const providerRepeat = await page.evaluate(archive => chrome.runtime.sendMessage({ action: 'BACKUP', payload: { op: 'import', archive } }), providerArchive);
+    assert.equal(providerRepeat.ok, true);
+    assert.equal(providerRepeat.data.extra, 0);
+    assert.deepEqual(await worker.evaluate(async () => Object.keys((await chrome.storage.local.get('settings')).settings.providers).sort()), providerKeys);
+    assert.equal(await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings.modelProvider), localSettings.modelProvider);
 
     await page.goto(`${base}/write/desk.html`);
     await page.locator('#markdown-editor').fill('# 保留我的草稿\n\n切换侧栏也不会丢失。');
