@@ -526,6 +526,39 @@ test('归档内同帖不同版本均保留，重复版本跳过，重复导入�
   await removeAllSessions();
 });
 
+test('重复导入模型配置冲突时复用已有副本，不改变当前选择和密钥', async () => {
+  await removeAllSessions();
+  const config = { label: '自定义连接', kind: 'chat', baseUrl: 'https://local.example/v1', model: 'local-model' };
+  const store = installChromeMock({ settings: { modelProvider: 'custom_a', providers: { custom_a: config } }, apiKeys: { custom_a: 'local-fixture-key' } });
+  const archive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
+    settings: { modelProvider: 'custom_a', providers: { custom_a: { ...config, baseUrl: 'https://archive.example/v1', model: 'archive-model' } } }
+  } };
+  await importBackup(archive);
+  const keys = Object.keys(store.settings.providers).sort();
+  const again = await previewBackup(archive);
+  assert.equal(again.extra, 0);
+  await importBackup(archive);
+  assert.deepEqual(Object.keys(store.settings.providers).sort(), keys);
+  assert.equal(store.settings.modelProvider, 'custom_a');
+  assert.equal(store.settings.providers.custom_a.model, 'local-model');
+  assert.deepEqual(store.apiKeys, { custom_a: 'local-fixture-key' });
+});
+
+test('模型配置合并超过上限，在会话和本地数据写入前拒绝', async () => {
+  await removeAllSessions();
+  const config = { label: '连接', kind: 'chat', baseUrl: 'https://local.example/v1', model: 'local-model' };
+  const providers = Object.fromEntries(Array.from({ length: 36 }, (_, i) => ['custom_p' + i, config]));
+  const store = installChromeMock({ settings: { providers }, initPrompt: '本地规则' });
+  const before = JSON.stringify(store);
+  const archive = { format: 'babel-tower-backup', version: 1, sessions: [{ key: 'post:909', data: { draft: '不应写入' } }], storage: {
+    settings: { providers: { custom_new: config } }
+  } };
+  await assert.rejects(previewBackup(archive), /超过 40/);
+  await assert.rejects(importBackup(archive), /超过 40/);
+  assert.equal(JSON.stringify(store), before);
+  assert.equal((await sessionOp({ op: 'list' })).length, 0);
+});
+
 const POST_A = { url: 'https://x.com/alice/status/111?s=20', text: '正文A', author: 'alice' };
 const POST_A_VARIANT = { url: 'https://x.com/i/status/111?t=9', text: '正文A', author: 'alice' };
 const POST_B = { url: 'https://x.com/bob/status/222', text: '正文B', author: 'bob' };
