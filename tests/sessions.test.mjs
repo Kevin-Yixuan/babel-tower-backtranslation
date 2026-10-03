@@ -481,6 +481,28 @@ test('备份中的特殊文稿 ID 正常导入，不误判为已有记录', asyn
   assert.equal({}.content, undefined);
 });
 
+test('重复草稿与文件夹的导入预览一致，重试不再产生冲突副本', async () => {
+  await removeAllSessions();
+  const store = installChromeMock({ writingDrafts: [{ id: 'd1', text: '本地稿' }] });
+  const conflict = { id: 'd1', text: '归档修改', metadata: { a: 1, b: 2 } }, fresh = { id: 'd2', text: '新稿' };
+  const archive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
+    writingDrafts: [conflict, conflict, fresh, fresh], documentFolders: ['归档', '归档'], initPrompt: ''
+  } };
+  const before = await previewBackup(archive);
+  assert.equal(before.imported, 2);
+  assert.equal(before.extra, 1);
+  assert.equal(before.skipped, 3);
+  const imported = await importBackup(archive);
+  assert.deepEqual([imported.imported, imported.extra, imported.skipped], [2, 1, 3]);
+  assert.equal(store.writingDrafts.length, 3);
+  assert.deepEqual(store.documentFolders, ['归档']);
+  store.writingDrafts.find(item => item.importedFromId === 'd1').metadata = { b: 2, a: 1 };
+  const again = await previewBackup(archive);
+  assert.deepEqual([again.imported, again.extra, again.skipped], [0, 0, 6]);
+  await importBackup(archive);
+  assert.equal(store.writingDrafts.length, 3);
+});
+
 const POST_A = { url: 'https://x.com/alice/status/111?s=20', text: '正文A', author: 'alice' };
 const POST_A_VARIANT = { url: 'https://x.com/i/status/111?t=9', text: '正文A', author: 'alice' };
 const POST_B = { url: 'https://x.com/bob/status/222', text: '正文B', author: 'bob' };
