@@ -1,6 +1,7 @@
 import { sessionOp } from './sessions.js';
 import { normalizeSettings, validateProviders } from './settings.js';
 import { withContentStorage } from './content-storage.js';
+import { ownRecordMap } from './agent-data.js';
 const arrays = ['writingDrafts', 'cards', 'growthMemories', 'savedPhrases'];
 const objects = ['growthSettings', 'discoveryPrefs', 'readingPrefs', 'glossary', 'documents', 'agentSessions'];
 const keys = ['settings', 'initPrompt', 'documentFolders', ...arrays, ...objects];
@@ -11,7 +12,7 @@ function documentContent(document) {
   return JSON.stringify(Object.fromEntries(Object.entries(content).sort(([a], [b]) => a.localeCompare(b))));
 }
 function mergeDocuments(local = {}, incoming = {}, createIds = false) {
-  const documents = { ...local };
+  const documents = ownRecordMap(local);
   let imported = 0, skipped = 0, extra = 0;
   for (const [id, document] of Object.entries(incoming)) {
     const existing = documents[id];

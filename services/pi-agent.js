@@ -1,4 +1,4 @@
-import { agentContextBlock, clampAgentHistory, normalizeDocument, safeAgentEndpoint } from './agent-data.js';
+import { agentContextBlock, clampAgentHistory, normalizeDocument, ownRecordMap, safeAgentEndpoint } from './agent-data.js';
 import { withContentStorage } from './content-storage.js';
 
 const storage = chrome.storage.local;
@@ -38,7 +38,7 @@ async function chat(payload) {
   const instruction = clean(payload?.message, 8000);
   if (!instruction || String(payload?.message || '').trim().length > 8000) throw new Error('请提供不超过 8000 字符的指令。');
   const { url, model } = await config();
-  const { agentSessions = {} } = await storage.get('agentSessions');
+  const agentSessions = ownRecordMap((await storage.get('agentSessions')).agentSessions);
   const id = clean(payload.sessionId, 80) || crypto.randomUUID();
   const previous = agentSessions[id] || { id, title: instruction.slice(0, 36), messages: [], createdAt: new Date().toISOString() };
   const context = Array.isArray(payload.context) ? payload.context : [];
@@ -58,7 +58,7 @@ async function chat(payload) {
   ].slice(-24);
   const session = { ...previous, provider: 'pi', baseUrl: url, model, messages, updatedAt: now };
   await withContentStorage(async () => {
-    const current = (await storage.get('agentSessions')).agentSessions || {};
+    const current = ownRecordMap((await storage.get('agentSessions')).agentSessions);
     current[id] = session;
     const kept = Object.values(current).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 20);
     await storage.set({ agentSessions: Object.fromEntries(kept.map(item => [item.id, item])) });
@@ -67,7 +67,7 @@ async function chat(payload) {
 }
 
 async function documents() {
-  return (await storage.get('documents')).documents || {};
+  return ownRecordMap((await storage.get('documents')).documents);
 }
 
 let conversationQueue = Promise.resolve();
@@ -79,7 +79,7 @@ export function agentOp(message) {
     if (action === 'LIST_AGENT_SESSIONS') return Object.values((await storage.get('agentSessions')).agentSessions || {}).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
     if (action === 'RESET_AGENT_SESSION') {
       await withContentStorage(async () => {
-        const all = (await storage.get('agentSessions')).agentSessions || {};
+        const all = ownRecordMap((await storage.get('agentSessions')).agentSessions);
         delete all[clean(message.sessionId, 80)];
         await storage.set({ agentSessions: all });
       });

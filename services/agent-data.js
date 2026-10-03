@@ -1,3 +1,7 @@
+export function ownRecordMap(value = {}) {
+  return Object.assign(Object.create(null), value);
+}
+
 export function clampAgentHistory(messages, maxMessages = 16, maxChars = 18_000) {
   const safe = (Array.isArray(messages) ? messages : []).filter(message => ['user', 'assistant'].includes(message?.role)).map(message => ({
     role: message.role,

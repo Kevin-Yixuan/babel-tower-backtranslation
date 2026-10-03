@@ -72,6 +72,12 @@ const os = require('node:os');
     await page.locator('#confirm-import').click();
     await page.waitForFunction(() => document.querySelector('#confirm-import').hidden);
     assert.equal(await worker.evaluate(async () => Object.keys((await chrome.storage.local.get('documents')).documents).length), 2);
+    const special = await page.evaluate(() => chrome.runtime.sendMessage({ action: 'SAVE_DOCUMENT', payload: { id: '__proto__', title: '特殊导入记录', content: '真实存储中的文稿' } }));
+    assert.equal(special.ok, true);
+    assert.equal(special.data.id, '__proto__');
+    const specialRead = await page.evaluate(() => chrome.runtime.sendMessage({ action: 'GET_DOCUMENT', id: '__proto__' }));
+    assert.equal(specialRead.data.content, '真实存储中的文稿');
+    await page.evaluate(() => chrome.runtime.sendMessage({ action: 'DELETE_DOCUMENT', id: '__proto__' }));
 
     await page.goto(`${base}/write/desk.html`);
     await page.locator('#markdown-editor').fill('# 保留我的草稿\n\n切换侧栏也不会丢失。');
