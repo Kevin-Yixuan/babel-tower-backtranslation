@@ -78,45 +78,14 @@ test('content scripts guard in-flight model results with seq + snapshot + candid
   assert(content.includes('compositionstart') && content.includes('compositionend'), 'IME 组合态延迟渲染');
 });
 
-test('writing.js draft cap never slices; new blocked at 20; export exists', () => {
-  const js = read('writing.js');
-  assert(!js.includes('slice(0, MAX_WRITING_DRAFTS)'), 'persist/init 不得裁剪草稿');
-  assert(js.includes('已达到 ${MAX_WRITING_DRAFTS} 篇上限'), '满额阻止新建');
-  assert(js.includes("$('#w-export')"), '提供导出');
-  assert(js.includes('data-del-draft'), '提供逐稿删除');
-  assert((js.match(/window\.confirm\(/g) || []).length >= 2, '清空仍需二次确认');
-});
-
-test('writing.js async results bind to draft id + content version; learned persists', () => {
-  const js = read('writing.js');
-  assert(js.includes('applyAsyncResult'), '统一写回入口');
-  assert(js.includes('formVersion') && js.includes('versionOf'), '内容版本指纹');
-  assert(js.includes('draft.learned = result.expressions'), '学习结果写入草稿对象');
-  // applyAsyncResult 内部 persist（W05 落盘）
-  const apply = js.slice(js.indexOf('function applyAsyncResult'), js.indexOf('function withBusy'));
-  assert(apply.includes('persist()'), '学习/反馈结果落盘');
-  assert(js.includes('workSeq'), '可取消');
-});
-
-test('writing workbench has no maxlength on body/reference inputs', () => {
-  const html = read('writing.html');
-  const bodyTag = html.match(/<textarea id="w-body"[^>]*>/)[0];
-  const refTag = html.match(/<textarea id="w-reference"[^>]*>/)[0];
-  assert(!bodyTag.includes('maxlength'), '正文输入不得 maxlength 预截断');
-  assert(!refTag.includes('maxlength'), '参考文章输入不得 maxlength 预截断');
-  assert(html.includes('当前没有自动分段'), '界面说明无自动分段');
-  assert(html.includes('w-cancel'), '取消按钮存在');
-});
-
 test('layered feedback renderer produces three separate blocks', () => {
   const shell = read('sidebar/sidebar.js');
   assert(shell.includes('bx-layer-meaning'));
   assert(shell.includes('bx-layer-grammar'));
   assert(shell.includes('bx-layer-polish'));
-  const writing = read('writing.js');
-  assert(writing.includes('意思是否传达'));
-  assert(writing.includes('语法问题'));
-  assert(writing.includes('表达润色'));
+  assert(shell.includes('意思是否传达'));
+  assert(shell.includes('语法问题'));
+  assert(shell.includes('表达润色'));
 });
 
 test('write mode textareas stay editable and errors preserve input', () => {

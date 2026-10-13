@@ -4,7 +4,7 @@ name: Release community preview
 # 手动触发时默认 dry_run，只构建不发布，用来验证流水线本身。
 # 分支门禁：push 触发时先核验提交关联到已合并 PR，构建步骤再带 --branch main；
 # 只有通过必需检查并合并的 main 才能产出候选包（publish 另加 ref == main 条件）。
-# 远端仓库层面的分支保护与必需状态检查需在 GitHub 设置中配置（见 docs/store-submission.md）。
+# 远端仓库层面的分支保护与必需状态检查需在 GitHub 设置中配置（见 docs/RELEASING.md）。
 # 同时产出 Chrome Web Store 提交候选（store 布局，仅作为流水线产物，不上传商店）。
 # 远端 tag 查询失败或版本未递增都会阻断构建（见 scripts/build-package.mjs）。
 

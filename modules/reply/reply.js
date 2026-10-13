@@ -221,8 +221,7 @@
         state.notice = ''; BX.refresh(); return;
       }
       try {
-        // 注：background 的 STORE 读 message.payload（与 SAVE_CARD/AI 同构），须嵌套 payload；
-        // 协议 §3.2 的扁平写法与之不一致，已在 HANDOFF-REPLY.md 记录给 integration。
+        // STORE 同时接受扁平与嵌套 payload 两种形态（协议 §3.2）；这里沿用嵌套写法。
         await send('STORE', { payload: { op: 'set', key: 'initPrompt', value } });
         state.reply = { ...(state.reply || {}), initPrompt: value || DEFAULT_INIT_PROMPT, promptOpen: true };
         state.error = '';
