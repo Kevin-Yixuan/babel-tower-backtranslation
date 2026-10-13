@@ -9,7 +9,7 @@
 - **回复页「让 Pi 润色」**：把草稿交给 Pi 并预填指令，确认后才发送。
 - **多邻国风格界面**：侧栏、帖内入口、弹窗、设置页和写作台改用明亮绿色与蓝色、圆润字体、带底边的立体按钮和圆角卡片。
 
-- **仓库整理**：README 改为项目介绍，版本历史移入本文件；新增 `docs/ARCHITECTURE.md`、`docs/RELEASING.md`、`docs/PERMISSIONS.md`；删除内部交接记录和已失效的测试。
+- **仓库整理**：README 改为项目介绍，版本历史移入本文件；新增 `docs/ARCHITECTURE.md`、`docs/RELEASING.md`、`docs/PERMISSIONS.md`；删除内部交接记录和已失效的测试；采用 MIT 许可证，`LICENSE` 随安装包分发。
 
 真实 Pi 需要先在本机配置桥接服务；测试只模拟桥接网络。
 

@@ -1,6 +1,7 @@
 # 巴别塔（回译）
 
 [![Tests](https://github.com/Kevin-Yixuan/babel-tower-backtranslation/actions/workflows/pr-tests.yml/badge.svg)](https://github.com/Kevin-Yixuan/babel-tower-backtranslation/actions/workflows/pr-tests.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/Kevin-Yixuan/babel-tower-backtranslation)](https://github.com/Kevin-Yixuan/babel-tower-backtranslation/releases)
 
 在 X（Twitter）上读懂外语、用自己的话回复的浏览器扩展。阅读时翻译、查词、讲解句子；回复时先用中文说清想法，再生成目标语言草稿，并用「回译」核对意思有没有走样。附带 Markdown 写作台和本机 [Pi](https://pi.dev) 写作助手。
@@ -74,3 +75,7 @@ scripts/             打包、校验、版本门禁
 ## 反馈
 
 请在 [Issues](https://github.com/Kevin-Yixuan/babel-tower-backtranslation/issues) 附上浏览器版本、复现步骤和去敏后的页面结构。不要上传密钥、令牌或私人帖子内容。
+
+## 许可证
+
+[MIT](LICENSE)

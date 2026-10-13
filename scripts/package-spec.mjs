@@ -13,6 +13,7 @@ export const PACKAGE_BASENAME = 'babel-tower-backtranslation';
 
 export const ROOT_FILES = [
   'README.md',
+  'LICENSE',
   'privacy.md',
   'manifest.json',
   'background.js',

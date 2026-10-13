@@ -2,6 +2,7 @@
   "name": "backwrite-x",
   "version": "0.5.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "test": "node --test tests/core.test.mjs tests/content-scan.test.mjs tests/pi-writing.test.mjs tests/pi-agent.test.mjs tests/pi-bridge.test.mjs tests/pi-http.test.mjs tests/ripemd.test.mjs tests/mdx-html.test.mjs tests/mdx-pipeline.test.mjs tests/release.test.mjs tests/sessions.test.mjs tests/settings-core.test.mjs tests/markdown.test.mjs tests/settings-page.test.mjs tests/content-guards.test.mjs",
