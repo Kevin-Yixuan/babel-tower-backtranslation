@@ -1,6 +1,6 @@
 // 页面宿主（integration 独占）：文章扫描与节点复用检测、帖内「翻译／回复」入口、
 // 编辑框聚焦跟踪、设置加载与广播。功能 UI 全部在 modules/*（经 BX.register 挂载），
-// 侧栏骨架在 sidebar/sidebar.js（window.BX）。协议见 SIDEBAR-PROTOCOL.md。
+// 侧栏骨架在 sidebar/sidebar.js（window.BX）。协议见 docs/ARCHITECTURE.md。
 (() => {
   if (window.__bxHostLoaded) return;
   window.__bxHostLoaded = true;

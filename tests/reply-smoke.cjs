@@ -322,6 +322,48 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   await page.locator('#reply-dialog-test').evaluate(element => element.remove());
   console.log('INSERT_DIALOG_UNIQUE_QUOTE_OK');
 
+  // X 的 Draft.js 发帖框：原生 insertText 会让浏览器与编辑器各渲染一次（界面重复、发布内容正确）。
+  // 仿真编辑器以内部 model 为准；粘贴由编辑器自行渲染，原生 beforeinput 会额外追加一份 DOM。
+  await page.evaluate(postText => {
+    const dialog = document.createElement('div');
+    dialog.id = 'draft-dialog-test';
+    dialog.setAttribute('role', 'dialog');
+    dialog.style.cssText = 'position:fixed;top:20px;left:20px;width:500px;height:220px;background:white;z-index:9999';
+    const quoted = document.createElement('div');
+    quoted.dataset.testid = 'tweetText';
+    quoted.textContent = postText;
+    const editor = document.createElement('div');
+    editor.id = 'edDraft';
+    editor.setAttribute('role', 'textbox');
+    editor.contentEditable = 'true';
+    editor.style.cssText = 'height:80px;width:400px;white-space:pre-wrap';
+    editor.dataset.model = '';
+    editor.addEventListener('paste', event => {
+      event.preventDefault();
+      editor.dataset.model += event.clipboardData.getData('text/plain');
+      editor.textContent = editor.dataset.model;
+    });
+    editor.addEventListener('beforeinput', event => {
+      if (event.inputType !== 'insertText') return;
+      editor.dataset.model += event.data;
+      queueMicrotask(() => { const span = document.createElement('span'); span.textContent = event.data; editor.append(span); });
+    });
+    dialog.append(quoted, editor);
+    document.body.append(dialog);
+  }, POST_B_TEXT);
+  const multiLine = 'Draft line one\nDraft line two';
+  await draftBox.fill(multiLine);
+  await page.locator('#edDraft').focus();
+  await page.locator('#bx-insert').click();
+  await page.locator('.bx-insert-confirm:not(.bx-insert-blocked)').waitFor();
+  await page.locator('#bx-insert-confirm').click();
+  await sleep(100);
+  const draftShown = await page.locator('#edDraft').evaluate(el => ({ text: el.textContent, model: el.dataset.model }));
+  assert.equal(draftShown.model, multiLine, `编辑器状态应恰好含一份草稿：${JSON.stringify(draftShown)}`);
+  assert.equal(draftShown.text, multiLine, `发帖框界面不得重复显示：${JSON.stringify(draftShown)}`);
+  await page.locator('#draft-dialog-test').evaluate(element => element.remove());
+  console.log('INSERT_DRAFT_EDITOR_NO_DUPLICATE_OK');
+
   // ─── ⑧ 后半：init prompt 编辑生效 → STORE 往返 → 恢复默认 ───
   // Post B owns a separate collapsed prompt panel; open it before editing.
   if (!(await page.locator('#bx-init-prompt').evaluate(el => el.open))) await page.locator('#bx-init-prompt summary').click();

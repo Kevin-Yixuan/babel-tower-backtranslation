@@ -111,7 +111,7 @@
       <textarea id="bx-init-prompt-text" rows="7">${esc(initText)}</textarea>
       <div class="bx-actions bx-actions-tight"><button class="bx-primary" id="bx-init-prompt-save">保存提示词</button><button id="bx-init-prompt-reset">恢复默认</button></div></details>`;
 
-    container.innerHTML = `<section class="bx-section"><div class="bx-kicker">跨语言沟通</div><h2>先把想法说清楚</h2><p class="bx-subtle">可以用中文写意图。生成期间也能继续改；生成失败或结果过期都不会清空/覆盖已输入内容。</p>${state.post?.text ? `<div class="bx-context">回复对象：${esc(state.post.author || '')} · ${esc(state.post.text.slice(0, 230))}</div>` : ''}${draftStale ? '<div class="bx-status bx-error">这份草稿是为上一个回复对象写的，不能插入当前对象；可复制后手动处理。</div>' : ''}<div class="bx-two"><div class="bx-field"><label for="bx-language">目标语言</label><select id="bx-language">${languages.map(x => `<option ${state.target === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div><div class="bx-field"><label for="bx-tone">语气</label><select id="bx-tone">${['自然', '友好', '简洁', '正式'].map(x => `<option ${state.tone === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div><label class="bx-label" for="bx-idea">我想表达</label><textarea id="bx-idea" placeholder="例如：我认同这一点，但想补充自己的经历……">${esc(state.idea)}</textarea>${lengthMeta('idea', state.idea)}<button class="bx-primary bx-wide" id="bx-generate" ${!state.idea.trim() || editorBusy ? 'disabled' : ''}>生成目标语言草稿</button><button class="bx-wide" id="bx-suggest-angles" ${editorBusy || !(state.post?.text || '').trim() ? 'disabled' : ''}>没想法？看看基于帖文的回应角度</button>${anglesHTML}<label class="bx-label" for="bx-draft">① 完整回复 · 可直接使用，也可自己改</label><textarea id="bx-draft" placeholder="生成后这里是完整可用的回复；也可以直接在这里写目标语言，再请模型检查。">${esc(state.draft)}</textarea>${lengthMeta('draft', state.draft)}${state.draftNote ? `<p class="bx-subtle">措辞说明：${esc(state.draftNote)}</p>` : ''}${resultHTML}${candidate ? `<div class="bx-candidate" role="status"><div class="bx-result-title">模型候选草稿 <small>你的当前输入没有被覆盖</small></div><p>${esc(candidate.text)}</p>${candidate.note ? `<small>${esc(candidate.note)}</small>` : ''}<div class="bx-actions bx-actions-tight"><button id="bx-adopt-candidate">采用为草稿</button><button id="bx-dismiss-candidate">忽略</button></div></div>` : ''}<div class="bx-actions"><button id="bx-check-reply" ${!state.draft.trim() || editorBusy ? 'disabled' : ''}>检查意思与表达</button><button id="bx-insert" ${!state.draft.trim() || editorBusy || draftStale ? 'disabled' : ''}>插入 X 草稿</button><button id="bx-copy-draft" ${!state.draft.trim() ? 'disabled' : ''}>复制草稿</button></div>${draftStale ? '<p class="bx-subtle">插入已停用：草稿与当前回复对象不一致。复制按钮仍可用。</p>' : ''}${confirmBox}${promptBox}${statusHTML()}</section>`;
+    container.innerHTML = `<section class="bx-section"><div class="bx-kicker">跨语言沟通</div><h2>先把想法说清楚</h2><p class="bx-subtle">可以用中文写意图。生成期间也能继续改；生成失败或结果过期都不会清空/覆盖已输入内容。</p>${state.post?.text ? `<div class="bx-context">回复对象：${esc(state.post.author || '')} · ${esc(state.post.text.slice(0, 230))}</div>` : ''}${draftStale ? '<div class="bx-status bx-error">这份草稿是为上一个回复对象写的，不能插入当前对象；可复制后手动处理。</div>' : ''}<div class="bx-two"><div class="bx-field"><label for="bx-language">目标语言</label><select id="bx-language">${languages.map(x => `<option ${state.target === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div><div class="bx-field"><label for="bx-tone">语气</label><select id="bx-tone">${['自然', '友好', '简洁', '正式'].map(x => `<option ${state.tone === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div><label class="bx-label" for="bx-idea">我想表达</label><textarea id="bx-idea" placeholder="例如：我认同这一点，但想补充自己的经历……">${esc(state.idea)}</textarea>${lengthMeta('idea', state.idea)}<button class="bx-primary bx-wide" id="bx-generate" ${!state.idea.trim() || editorBusy ? 'disabled' : ''}>生成目标语言草稿</button><button class="bx-wide" id="bx-suggest-angles" ${editorBusy || !(state.post?.text || '').trim() ? 'disabled' : ''}>没想法？看看基于帖文的回应角度</button>${anglesHTML}<label class="bx-label" for="bx-draft">① 完整回复 · 可直接使用，也可自己改</label><textarea id="bx-draft" placeholder="生成后这里是完整可用的回复；也可以直接在这里写目标语言，再请模型检查。">${esc(state.draft)}</textarea>${lengthMeta('draft', state.draft)}${state.draftNote ? `<p class="bx-subtle">措辞说明：${esc(state.draftNote)}</p>` : ''}${resultHTML}${candidate ? `<div class="bx-candidate" role="status"><div class="bx-result-title">模型候选草稿 <small>你的当前输入没有被覆盖</small></div><p>${esc(candidate.text)}</p>${candidate.note ? `<small>${esc(candidate.note)}</small>` : ''}<div class="bx-actions bx-actions-tight"><button id="bx-adopt-candidate">采用为草稿</button><button id="bx-dismiss-candidate">忽略</button></div></div>` : ''}<div class="bx-actions"><button id="bx-check-reply" ${!state.draft.trim() || editorBusy ? 'disabled' : ''}>检查意思与表达</button><button id="bx-insert" ${!state.draft.trim() || editorBusy || draftStale ? 'disabled' : ''}>插入 X 草稿</button><button id="bx-copy-draft" ${!state.draft.trim() ? 'disabled' : ''}>复制草稿</button><button id="bx-ask-pi" ${!state.draft.trim() ? 'disabled' : ''}>让 Pi 润色</button></div>${draftStale ? '<p class="bx-subtle">插入已停用：草稿与当前回复对象不一致。复制按钮仍可用。</p>' : ''}${confirmBox}${promptBox}${statusHTML()}</section>`;
 
     const idea = container.querySelector('#bx-idea'), draft = container.querySelector('#bx-draft');
     idea.oninput = () => {
@@ -130,6 +130,7 @@
       container.querySelector('#bx-check-reply').disabled = blocked;
       container.querySelector('#bx-insert').disabled = blocked || draft.value.length > MAX_WRITE;
       container.querySelector('#bx-copy-draft').disabled = !draft.value.trim();
+      container.querySelector('#bx-ask-pi').disabled = !draft.value.trim();
     };
     container.querySelector('#bx-language').onchange = event => { state.target = event.target.value; };
     container.querySelector('#bx-tone').onchange = event => { state.tone = event.target.value; };
@@ -191,6 +192,10 @@
       };
     });
 
+    container.querySelector('#bx-ask-pi').onclick = () => BX.emit('agent-prefill', {
+      text: '润色我的回复草稿，让它更地道自然，保留原意；先给改后的完整文本，再用中文简要说明改了什么。',
+      context: ['draft', 'post']
+    });
     container.querySelector('#bx-insert').onclick = () => { state.binding = resolveInsertTarget(); state.insertConfirm = true; state.error = ''; BX.refresh(); };
     container.querySelector('#bx-insert-confirm')?.addEventListener('click', performInsert);
     container.querySelector('#bx-insert-cancel')?.addEventListener('click', () => { state.insertConfirm = false; BX.refresh(); });
@@ -216,8 +221,7 @@
         state.notice = ''; BX.refresh(); return;
       }
       try {
-        // 注：background 的 STORE 读 message.payload（与 SAVE_CARD/AI 同构），须嵌套 payload；
-        // 协议 §3.2 的扁平写法与之不一致，已在 HANDOFF-REPLY.md 记录给 integration。
+        // STORE 同时接受扁平与嵌套 payload 两种形态（协议 §3.2）；这里沿用嵌套写法。
         await send('STORE', { payload: { op: 'set', key: 'initPrompt', value } });
         state.reply = { ...(state.reply || {}), initPrompt: value || DEFAULT_INIT_PROMPT, promptOpen: true };
         state.error = '';
@@ -315,6 +319,25 @@
     BX.refresh();
   }
 
+  // X 的发帖框是 Draft.js 受控编辑器：execCommand('insertText') 会让浏览器原生插入与编辑器
+  // 自身状态各写一次，界面上同一段文字可能显示一遍或两遍（发布内容仍以编辑器状态为准）。
+  // 优先派发带纯文本的粘贴事件，由编辑器用自己的状态完整渲染；编辑器未处理时才回退原生插入。
+  function insertIntoEditor(editor, text) {
+    // 先同步选区，让受控编辑器在粘贴前读到“末尾追加”的光标位置。
+    document.dispatchEvent(new Event('selectionchange'));
+    let paste = null;
+    try {
+      const data = new DataTransfer();
+      data.setData('text/plain', text);
+      paste = new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true });
+    } catch { /* 环境不支持构造粘贴事件 */ }
+    if (paste && paste.clipboardData?.getData('text/plain') === text) {
+      editor.dispatchEvent(paste);
+      if (paste.defaultPrevented) return true;
+    }
+    return document.execCommand('insertText', false, text);
+  }
+
   function performInsert() {
     const binding = state.binding;
     // 确认时重新核对：目标仍连接、可见、仍属预览时的帖子；预览后切换帖子/移除节点 → 安全拒绝。
@@ -367,7 +390,7 @@
     selection.removeAllRanges();
     selection.addRange(range);
     const payload = existing ? `\n${state.draft}` : state.draft;
-    const inserted = document.execCommand('insertText', false, payload);
+    const inserted = insertIntoEditor(editor, payload);
     if (!inserted) { state.error = '发帖框没有接受插入操作。请用「复制草稿」后手动粘贴。'; state.insertConfirm = false; BX.refresh(); return; }
     state.insertConfirm = false;
     state.notice = existing ? '已追加到发帖框末尾，原文字保留。发布前请自行确认。' : '已插入发帖框。发布前请自行确认。';

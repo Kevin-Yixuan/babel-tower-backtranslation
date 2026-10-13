@@ -123,6 +123,15 @@ const os = require('node:os');
     assert.equal(providerRepeat.data.extra, 0);
     assert.deepEqual(await worker.evaluate(async () => Object.keys((await chrome.storage.local.get('settings')).settings.providers).sort()), providerKeys);
     assert.equal(await worker.evaluate(async () => (await chrome.storage.local.get('settings')).settings.modelProvider), localSettings.modelProvider);
+    const beforeInvalid = await worker.evaluate(async () => JSON.stringify(await chrome.storage.local.get(['documents', 'agentSessions'])));
+    const invalidArchive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
+      documents: { invalid: { id: 'invalid', title: '损坏记录', content: '正文', folder: '我的文章', revision: 'bad' } }
+    } };
+    await page.locator('#import-backup').setInputFiles([]);
+    await page.locator('#import-backup').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalidArchive)) });
+    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('文稿数据格式不正确'));
+    assert.equal(await page.locator('#confirm-import').isVisible(), false);
+    assert.equal(await worker.evaluate(async () => JSON.stringify(await chrome.storage.local.get(['documents', 'agentSessions']))), beforeInvalid);
 
     await page.goto(`${base}/write/desk.html`);
     await page.locator('#markdown-editor').fill('# 保留我的草稿\n\n切换侧栏也不会丢失。');

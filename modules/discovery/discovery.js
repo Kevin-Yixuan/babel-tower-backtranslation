@@ -198,9 +198,7 @@
   const activeInterestRules = () => prefsNow().interestRules.filter(rule => rule.enabled && rule.text);
 
   // 保存走串行链：快速连续编辑不会互相覆盖，也不会在后台读到旧值后才落盘。
-  // 注意消息形状：background 的 STORE 走 storeOp(message.payload)，而 BX.send 是把参数平铺进消息，
-  // 所以必须显式带 payload 键（与 JEV/AI/SAVE_CARD 一致）；协议 §3.2 里的平铺写法与后台实现不一致，
-  // 已写进交接说明由 integration 统一（本模块按后台现状调用，两种归一方式下都兼容）。
+  // STORE 同时接受扁平与嵌套 payload 两种形态（协议 §3.2）；这里沿用嵌套写法。
   let persistChain = Promise.resolve();
   function persistPrefs() {
     const value = JSON.parse(JSON.stringify(prefsNow()));

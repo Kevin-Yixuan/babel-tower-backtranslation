@@ -559,6 +559,31 @@ test('模型配置合并超过上限，在会话和本地数据写入前拒绝',
   assert.equal((await sessionOp({ op: 'list' })).length, 0);
 });
 
+test('错误的文稿版本与助手历史，在预览和写入前明确拒绝', async () => {
+  await removeAllSessions();
+  const store = installChromeMock({ documents: {}, initPrompt: '保留本地规则' });
+  const document = { id: 'broken-document', title: '文稿', content: '正文', folder: '我的文章', revision: 'invalid' };
+  const archives = [
+    { documents: { [document.id]: document } },
+    { agentSessions: { broken: null } },
+    { agentSessions: { broken: { id: 'broken', messages: 'not-an-array' } } },
+    { agentSessions: { broken: { id: 'other', messages: [] } } }
+  ];
+  const before = JSON.stringify(store);
+  for (const storage of archives) {
+    const archive = { format: 'babel-tower-backup', version: 1, sessions: [], storage };
+    await assert.rejects(previewBackup(archive), /文稿|助手会话/);
+    await assert.rejects(importBackup(archive), /文稿|助手会话/);
+    assert.equal(JSON.stringify(store), before);
+  }
+  assert.throws(() => validateBackup({ format: 'babel-tower-backup', version: 1, sessions: [], storage: [] }), /不是支持/);
+  const valid = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
+    documents: { legacy: { id: 'legacy', title: '旧版文稿', content: '正文', folder: '我的文章' } },
+    agentSessions: { legacy: { id: 'legacy', messages: [{ role: 'assistant', content: '旧版回复' }] } }
+  } };
+  assert.equal(validateBackup(valid).documents, 1, '旧版文稿没有 revision 仍可恢复');
+});
+
 const POST_A = { url: 'https://x.com/alice/status/111?s=20', text: '正文A', author: 'alice' };
 const POST_A_VARIANT = { url: 'https://x.com/i/status/111?t=9', text: '正文A', author: 'alice' };
 const POST_B = { url: 'https://x.com/bob/status/222', text: '正文B', author: 'bob' };

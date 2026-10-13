@@ -230,7 +230,7 @@ async function refreshAgentStatus() {
   const card = $('#agent-runtime');
   card.classList.remove('ready');
   card.querySelector('b').textContent = '正在检测…';
-  card.querySelector('small').textContent = '连接开源模型运行时';
+  card.querySelector('small').textContent = '连接本机 Pi 桥接服务';
   const result = await send('AGENT_STATUS');
   card.classList.toggle('ready', result.ready);
   card.querySelector('b').textContent = result.label;
@@ -253,7 +253,7 @@ function agentContext() {
 function renderAgentThread() {
   const thread = $('#agent-thread');
   if (!state.agentMessages.length) {
-    thread.innerHTML = '<div class="thread-empty"><b>先写，再让 Agent 进入。</b><span>发送指令、勾选材料及本会话历史，不会发布任何内容。</span></div>';
+    thread.innerHTML = '<div class="thread-empty"><b>嗨，我是 Pi！</b><span>先写一点，再勾选材料让我帮忙。只发送你勾选的内容，不会发布任何东西。</span></div>';
     $('#agent-output-actions').hidden = true;
     return;
   }

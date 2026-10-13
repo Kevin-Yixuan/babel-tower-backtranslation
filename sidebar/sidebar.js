@@ -1,6 +1,6 @@
 // 侧栏骨架（integration 独占）：页签容器、模块注册表、共享状态、请求序号与 IME、事件总线。
 // 页面结构与入口（帖子上的「翻译／回复」按钮、扫描、设置广播）在 content.js；
-// 各功能以 BX.register() 挂载在 modules/ 下，协议见 SIDEBAR-PROTOCOL.md。
+// 各功能以 BX.register() 挂载在 modules/ 下，协议见 docs/ARCHITECTURE.md。
 (() => {
   if (window.__bxSidebarLoaded) return;
   window.__bxSidebarLoaded = true;

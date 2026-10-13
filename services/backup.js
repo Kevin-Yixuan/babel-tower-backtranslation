@@ -64,16 +64,26 @@ export async function exportBackup() {
     storage: stored, sessions: await sessionOp({ op: 'list' }), dictionary: { action: 'reimport-mdx-original' } };
 }
 export function validateBackup(archive) {
-  if (archive?.format !== 'babel-tower-backup' || archive.version !== 1 || !archive.storage || !Array.isArray(archive.sessions)) throw new Error('不是支持的巴别塔备份文件。');
+  if (archive?.format !== 'babel-tower-backup' || archive.version !== 1 || !archive.storage
+    || typeof archive.storage !== 'object' || Array.isArray(archive.storage) || !Array.isArray(archive.sessions)) throw new Error('不是支持的巴别塔备份文件。');
   if (JSON.stringify(archive).length > 40_000_000) throw new Error('备份过大，请拆分导入。');
   for (const name of arrays) if (archive.storage[name] !== undefined && (!Array.isArray(archive.storage[name]) || archive.storage[name].some(x => !x || typeof x !== 'object' || Array.isArray(x)))) throw new Error(name + ' 数据格式不正确。');
   if (archive.storage.documentFolders !== undefined && (!Array.isArray(archive.storage.documentFolders) || archive.storage.documentFolders.some(x => typeof x !== 'string' || x.length > 100))) throw new Error('资料文件夹格式不正确。');
   for (const name of objects) if (archive.storage[name] !== undefined && (!archive.storage[name] || typeof archive.storage[name] !== 'object' || Array.isArray(archive.storage[name]))) throw new Error(name + ' 数据格式不正确。');
   for (const [id, document] of Object.entries(archive.storage.documents || {})) {
     if (!document || typeof document !== 'object' || Array.isArray(document)
-      || !id || id.length > 80 || document.id !== id || typeof document.content !== 'string'
+      || !id || id.length > 80 || id.trim() !== id || document.id !== id || typeof document.content !== 'string'
       || document.content.length > 200000 || typeof document.title !== 'string'
-      || typeof document.folder !== 'string') throw new Error('文稿数据格式不正确。');
+      || typeof document.folder !== 'string'
+      || (document.revision !== undefined && (!Number.isSafeInteger(document.revision) || document.revision < 0))) throw new Error('文稿数据格式不正确。');
+  }
+  for (const [id, session] of Object.entries(archive.storage.agentSessions || {})) {
+    if (!session || typeof session !== 'object' || Array.isArray(session) || !id || id.length > 80 || id.trim() !== id
+      || session.id !== id || !Array.isArray(session.messages) || session.messages.length > 24
+      || session.messages.some(message => !message || !['user', 'assistant'].includes(message.role)
+        || typeof message.content !== 'string' || message.content.length > 40000
+        || (message.contextLabels !== undefined && (!Array.isArray(message.contextLabels)
+          || message.contextLabels.length > 8 || message.contextLabels.some(label => typeof label !== 'string' || label.length > 40))))) throw new Error('助手会话数据格式不正确，请检查原备份文件。');
   }
   if (archive.storage.initPrompt !== undefined && typeof archive.storage.initPrompt !== 'string') throw new Error('提示词数据不正确。');
   if (archive.storage.settings) validateProviders(normalizeSettings(archive.storage.settings).providers);

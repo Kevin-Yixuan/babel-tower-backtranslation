@@ -13,3 +13,14 @@
 .bx-collapse-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 17px;background:#eaf0e9;color:#3f654d;font-size:12px}
 .bx-collapse-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bx-collapse-bar button{border:1px solid #abc2ad;background:white;color:#285d3d;border-radius:6px;padding:3px 8px;white-space:nowrap;font-size:11px;cursor:pointer;font:inherit}
+
+/* 0.5.0 多邻国风格：帖内入口与选区条 */
+.bx-entry{border:2px solid #e5e5e5!important;border-bottom-width:3px!important;background:#fff!important;color:#1899d6!important;border-radius:12px!important;font-weight:800!important;font-family:"Nunito",ui-rounded,"PingFang SC","Microsoft YaHei",sans-serif!important;padding:3px 10px!important}
+.bx-entry:hover{background:#ddf4ff!important;border-color:#84d8ff!important}
+.bx-entry-reply{color:#58a700!important}
+.bx-entry-reply:hover{background:#d7ffb8!important;border-color:#a5ed6e!important}
+#bx-selection-bar{background:#fff;border:2px solid #e5e5e5;border-bottom-width:4px;border-radius:14px;box-shadow:0 8px 24px #0000001f}
+#bx-selection-bar button{color:#1899d6;font-weight:800;border-radius:10px}
+#bx-selection-bar button:hover{background:#ddf4ff;border-radius:10px}
+.bx-collapse-bar{background:#f7f7f7;color:#777;font-weight:700;border-radius:14px}
+.bx-collapse-bar button{border:2px solid #e5e5e5;border-bottom-width:3px;border-radius:10px;color:#1899d6;font-weight:800}
