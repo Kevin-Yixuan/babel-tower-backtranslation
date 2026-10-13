@@ -7,3 +7,44 @@
 @media(max-width:760px){.options-page{display:block;padding:0 16px}.options-page>.header{padding:22px 0}.options-page .tabs{position:static;flex-direction:row;overflow-x:auto;gap:4px;padding:16px 0}.options-page .tabs button{white-space:nowrap;padding:10px 12px}.options-page main{padding:0 0 20px}.options-page [data-panel]{padding:22px 18px;border-radius:12px}.save-bar{bottom:8px;padding:12px}.save-bar button{padding:10px 12px}.options-page>footer{text-align:center}.dictionary-box{padding:18px}h2{font-size:22px}}
 @media(prefers-reduced-motion:reduce){.launch-card{transition:none}}
 .save-bar{width:100%;max-width:780px}
+
+/* 0.5.0 多邻国风格主题层（弹窗与设置页共用）：明亮配色、圆润字体、立体按钮。只覆盖视觉。 */
+:root{--duo-green:#58cc02;--duo-green-dark:#58a700;--duo-green-soft:#d7ffb8;--duo-blue:#1cb0f6;--duo-blue-dark:#1899d6;--duo-blue-soft:#ddf4ff;--duo-red-dark:#ea2b2b;--duo-red-soft:#ffdfe0;--duo-yellow:#ffc800;--duo-ink:#3c3c3c;--duo-muted:#777;--duo-hare:#afafaf;--duo-swan:#e5e5e5;--duo-polar:#f7f7f7;--duo-font:"Nunito","DIN Round Pro",ui-rounded,"SF Pro Rounded","PingFang SC","Microsoft YaHei",-apple-system,sans-serif;--green:var(--duo-green-dark);--line:var(--duo-swan);--muted:var(--duo-muted);--soft:var(--duo-blue-soft);font-family:var(--duo-font);color:var(--duo-ink);background:#fff}
+body{background:#fff;color:var(--duo-ink);font-weight:500}
+h1,h2,h3,b,.eyebrow,label,summary{font-family:var(--duo-font)}
+h2{font-weight:800;letter-spacing:0}.header h1{font-weight:900;letter-spacing:0}
+.eyebrow{color:var(--duo-green);font-weight:900;letter-spacing:1.2px}
+.header{border-bottom:2px solid var(--duo-swan)}
+.logo{background:var(--duo-green);border-radius:14px;box-shadow:0 4px 0 var(--duo-green-dark);font:900 22px/1 var(--duo-font)}
+button,.secondary,.file-button{border:2px solid var(--duo-swan);border-bottom-width:4px;border-radius:14px;background:#fff;color:var(--duo-blue);font-weight:800;transition:transform .08s,filter .15s}
+button:hover,.secondary:hover,.file-button:hover{background:#fff;filter:brightness(.97)}
+.primary{background:var(--duo-green);border:0;border-bottom:4px solid var(--duo-green-dark);color:#fff;border-radius:14px;font-weight:900}
+.primary:hover{background:var(--duo-green);filter:brightness(1.06)}
+button:not(:disabled):active,.primary:active,.secondary:active,.launch-card:active{transform:translateY(2px)}
+button:disabled{opacity:1;color:var(--duo-hare);background:var(--duo-swan);border-color:var(--duo-swan)}
+button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--duo-blue)}
+input,select{accent-color:var(--duo-green)}
+.field input:not([type=range]),.field select,.rule input[type=text],textarea{background:var(--duo-polar);border:2px solid var(--duo-swan);border-radius:14px;color:var(--duo-ink);font-weight:600}
+.field input:focus,.field select:focus,.rule input:focus,textarea:focus{border-color:var(--duo-blue);box-shadow:none;background:#fff}
+.privacy,.launcher-note{background:var(--duo-blue-soft);border:2px solid #b8e8ff;border-radius:16px;color:#2b6f8f;font-weight:600}
+.launch-card{border:2px solid var(--duo-swan)!important;border-bottom-width:4px!important;border-radius:18px!important;background:#fff!important;color:var(--duo-ink)!important;transition:transform .08s}
+.launch-card:hover{background:var(--duo-polar)!important;transform:none}
+.launcher{background:#fff}
+.launch-card b{font-weight:900}
+.launch-icon{background:var(--duo-blue)!important;color:#fff!important;border-radius:14px!important;box-shadow:0 3px 0 var(--duo-blue-dark);font-weight:900!important}
+.launch-card+.launch-card .launch-icon{background:var(--duo-green)!important;box-shadow:0 3px 0 var(--duo-green-dark)}
+.launcher #open-settings{color:var(--duo-blue)}
+.launcher footer,body>footer{color:var(--duo-hare);font-weight:700}
+.options-page .tabs{border-bottom:2px solid var(--duo-swan)}
+.options-page .tabs button{border:2px solid transparent;background:transparent;color:var(--duo-muted);border-radius:12px;font-weight:800}
+.options-page .tabs button:hover{background:var(--duo-polar);filter:none}
+.options-page .tabs button.active{background:var(--duo-blue-soft);border-color:#84d8ff;color:var(--duo-blue-dark);box-shadow:none}
+.dictionary-box,.diagnostics-box,.saved-card,.session-item,.rule{border:2px solid var(--duo-swan)!important;border-radius:16px!important;background:#fff}
+.save-bar{border-top:2px solid var(--duo-swan);background:#fff}
+.switch-row{border-bottom:2px solid var(--duo-polar)}
+.switch-row b{font-weight:800}
+.ok{color:var(--duo-green-dark);font-weight:700}
+.error{color:var(--duo-red-dark);font-weight:700}
+a{color:var(--duo-blue-dark)}
+@media(prefers-reduced-motion:reduce){button,.launch-card{transition:none}}
+.options-page{background:var(--duo-polar)}

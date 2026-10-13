@@ -10,7 +10,7 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div class="brand"><span class="logo">回</span><div><b>自由写作台</b><small>Markdown 文稿 + 开源 Agent</small></div></div>
+      <div class="brand"><span class="logo">回</span><div><b>自由写作台</b><small>Markdown 文稿 + Pi Agent</small></div></div>
       <div class="document-title"><input id="doc-title" value="未命名文稿" maxlength="100" aria-label="文稿标题" disabled><span id="save-state" role="status" aria-live="polite">加载中…</span></div>
       <div class="top-actions">
         <button id="retry-save" hidden>重试保存</button>
@@ -53,10 +53,10 @@
 
     <aside id="writing-agent" class="agent-panel" aria-label="写作 Agent">
       <div class="agent-head">
-        <div><small>OPEN AGENT</small><h1>写作协作者</h1></div>
+        <div><small>PI AGENT</small><h1>写作协作者</h1></div>
         <button id="agent-reset">新会话</button>
       </div>
-      <div id="agent-runtime" class="runtime-card"><span class="runtime-dot"></span><div><b>正在检测…</b><small>连接开源模型运行时</small></div><button id="agent-refresh">↻</button></div>
+      <div id="agent-runtime" class="runtime-card"><span class="runtime-dot"></span><div><b>正在检测…</b><small>连接本机 Pi 桥接服务</small></div><button id="agent-refresh">↻</button></div>
 
       <section class="context-section">
         <div class="section-title"><b>上下文</b><span>你决定发送什么</span></div>
@@ -73,10 +73,10 @@
         <button data-context="document" data-prompt="审阅当前文稿，指出最影响表达的 3 个具体问题，并给出逐句修改方案。不要泛泛而谈。">具体审稿</button>
       </div>
 
-      <div id="agent-thread" class="agent-thread"><div class="thread-empty"><b>先写，再让 Agent 进入。</b><span>发送指令、勾选材料及本会话历史，不会发布任何内容。</span></div></div>
+      <div id="agent-thread" class="agent-thread"><div class="thread-empty"><b>嗨，我是 Pi！</b><span>先写一点，再勾选材料让我帮忙。只发送你勾选的内容，不会发布任何东西。</span></div></div>
 
       <div class="composer">
-        <textarea id="agent-prompt" placeholder="告诉 Agent 这一步要做什么……"></textarea>
+        <textarea id="agent-prompt" placeholder="告诉 Pi 这一步要做什么……"></textarea>
         <div class="composer-actions"><span id="agent-hint">结果返回后可插入、替换或追加</span><button id="agent-send" class="primary" disabled>发送</button></div>
       </div>
       <div id="agent-output-actions" class="output-actions" hidden>
