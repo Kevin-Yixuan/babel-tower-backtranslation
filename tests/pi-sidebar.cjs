@@ -22,14 +22,11 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{margi
     });
     context.setDefaultTimeout(10000);
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker', { timeout: 15000 });
-    const extensionId = new URL(worker.url()).host;
-    const manager = await context.newPage();
-    await manager.goto('edge://extensions');
-    await manager.evaluate(id => chrome.developerPrivate.addHostPermission(id, 'http://127.0.0.1/*'), extensionId);
-    await manager.close();
-    await worker.evaluate(async () => {
+        await worker.evaluate(async () => {
       await chrome.storage.local.set({ agentKey: 'pi-test-token', settings: { autoTranslate: false, agentProvider: 'pi', agentBaseUrl: 'http://127.0.0.1:4097' } });
-      globalThis.__pi = { ready: false, calls: [], hold: null };
+      globalThis.__pi = { ready: false, calls: [], hold: null, permissionChecks: [] };
+      // 无头浏览器无法点击原生授权弹窗；记录扩展核对的来源，并视为用户已授权本机 Pi 地址。
+      chrome.permissions.contains = async request => { globalThis.__pi.permissionChecks.push(request); return true; };
       globalThis.fetch = async (url, options = {}) => {
         const body = options.body ? JSON.parse(options.body) : null;
         globalThis.__pi.calls.push({ url: String(url), body });
@@ -80,6 +77,8 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>body{margi
     assert.match(await page.locator('.bx-agent-pi .bx-agent-text').last().innerText(), /PI_ANSWER/);
     const chat = (await worker.evaluate(() => globalThis.__pi.calls)).find(call => call.url.endsWith('/chat'));
     assert(chat.body.prompt.includes('POST_1'), 'post context is sent when checked');
+    const checks = await worker.evaluate(() => globalThis.__pi.permissionChecks);
+    assert(checks.length && checks.every(check => JSON.stringify(check) === JSON.stringify({ origins: ['http://127.0.0.1:4097/*'] })), `permission checks: ${JSON.stringify(checks)}`);
     assert(!chat.body.prompt.includes('回复草稿'), 'unchecked draft is not sent');
     if (shots) await page.locator('#bx-sidebar').screenshot({ path: path.join(shots, 'pi-answer.png') });
     console.log('PASS quick task sends checked context and shows answer');
