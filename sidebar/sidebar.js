@@ -8,7 +8,7 @@
   // ---- 共享状态（字段归属见协议 §2；新字段必须带模块前缀） ----
   const state = {
     mode: 'read', post: null, selected: '', readingInput: { scope: 'full', manualText: '', source: '自动检测', target: '中文' }, editor: null, busy: false, error: '', notice: '',
-    dictionary: null, explanation: '', practice: null, practiceAnswer: '', practiceFeedback: null,
+    dictionary: null, explanation: '',
     revision: '', revisionFeedback: null, idea: '', draft: '', draftNote: '', replyFeedback: null,
     target: '英语', tone: '自然', cards: [], settings: null, insertConfirm: false,
     binding: null, reqSeq: 0, draftCandidate: null, draftPostUrl: '', composing: false, pendingRender: false

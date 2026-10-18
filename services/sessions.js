@@ -1,6 +1,6 @@
 // User-authored work is never evicted. Model results can be cleared explicitly in settings.
 import './session-fields.js';
-import { stableJson } from './agent-data.js';
+import { stableJson } from './util.js';
 let opening;
 const request = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
 function database() {

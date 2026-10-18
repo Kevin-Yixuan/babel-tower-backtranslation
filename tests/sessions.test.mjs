@@ -310,31 +310,29 @@ test('导出不含任何密钥；MDX 词典提示用原文件重新导入', asyn
     apiKeys: { openai: 'sk-SECRET123' },
     settings: { modelProvider: 'openai', providers: { openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-luna', apiKey: 'sk-INLINE456' } } },
     initPrompt: '我的规则',
-    writingDrafts: [{ id: 'w1', text: '亲写稿' }],
-    cards: [], growthMemories: [], savedPhrases: [],
+    savedPhrases: [{ id: 'w1', text: '亲写稿' }],
+    cards: [],
     readingPrefs: { source: '自动检测' },
     glossary: { hello: '你好' },
-    jevKey: 'jev-SECRET'
+    legacySecret: 'x'
   });
   const archive = await exportBackup();
   const json = JSON.stringify(archive);
   assert.ok(!json.includes('sk-SECRET123'), 'apiKeys 不得进入备份');
   assert.ok(!json.includes('sk-INLINE456'), 'providers 里的密钥字段必须被剥离');
-  assert.ok(!json.includes('jev-SECRET'), 'jevKey 不得进入备份');
-  assert.equal(archive.format, 'babel-tower-backup');
+    assert.equal(archive.format, 'babel-tower-backup');
   assert.equal(archive.version, 1);
   assert.ok(Array.isArray(archive.sessions));
   assert.equal(archive.dictionary.action, 'reimport-mdx-original');
   assert.equal(archive.storage.settings.providers.openai.apiKey, undefined);
   assert.equal(archive.storage.apiKeys, undefined);
-  assert.equal(archive.storage.jevKey, undefined);
   // 跨扩展 ID：归档不携带任何扩展 ID 相关字段
   assert.equal(archive.extensionId, undefined);
   const counts = validateBackup(archive);
-  assert.equal(counts.drafts, 1);
+  assert.equal(counts.phrases, 1);
   assert.throws(() => validateBackup({ format: 'other', version: 1, storage: {}, sessions: [] }), /不是支持的巴别塔备份文件/);
   assert.throws(() => validateBackup({ format: 'babel-tower-backup', version: 2, storage: {}, sessions: [] }), /不是支持的巴别塔备份文件/);
-  assert.throws(() => validateBackup({ format: 'babel-tower-backup', version: 1, storage: { writingDrafts: 'nope' }, sessions: [] }), /数据格式不正确/);
+  assert.throws(() => validateBackup({ format: 'babel-tower-backup', version: 1, storage: { savedPhrases: 'nope' }, sessions: [] }), /数据格式不正确/);
   void store;
 });
 
@@ -345,7 +343,7 @@ test('导入：密钥不落盘、本地配置优先、会话失败则整体不�
     apiKeys: { openai: 'sk-LOCAL789' },
     settings: { modelProvider: 'openai', providers: { openai: { baseUrl: 'https://local.example/v1', model: 'local-model' } } },
     initPrompt: '本地规则',
-    writingDrafts: [{ id: 'w1', text: '本地稿' }]
+    savedPhrases: [{ id: 'w1', text: '本地稿' }]
   });
   const archive = {
     format: 'babel-tower-backup', version: 1, createdAt: new Date().toISOString(),
@@ -353,13 +351,12 @@ test('导入：密钥不落盘、本地配置优先、会话失败则整体不�
     sessions: [{ key: 'post:2002', data: { draft: '归档会话' } }],
     storage: {
       apiKeys: { openai: 'sk-ARCHIVE999' },
-      jevKey: 'jev-ARCHIVE',
       settings: { modelProvider: 'openai', providers: {
         openai: { baseUrl: 'https://archive.example/v1', model: 'archive-model' },
         custom: { baseUrl: 'https://c.example/v1', model: 'c-model', apiKey: 'sk-SMUGGLE' }
       } },
       initPrompt: '归档规则',
-      writingDrafts: [{ id: 'w1', text: '归档稿' }, { id: 'w2', text: '新归档稿' }]
+      savedPhrases: [{ id: 'w1', text: '归档稿' }, { id: 'w2', text: '新归档稿' }]
     }
   };
   const result = await importBackup(archive);
@@ -367,18 +364,17 @@ test('导入：密钥不落盘、本地配置优先、会话失败则整体不�
   assert.match(result.dictionary, /密钥/);
   // 密钥不落盘、本地密钥不动
   assert.deepEqual(store.apiKeys, { openai: 'sk-LOCAL789' });
-  assert.equal(store.jevKey, undefined);
   // 本地 provider 配置优先；归档新增 provider 进来但被剥掉密钥
   assert.equal(store.settings.providers.openai.baseUrl, 'https://local.example/v1');
   assert.equal(store.settings.providers.custom.baseUrl, 'https://c.example/v1');
   assert.equal(store.settings.providers.custom.apiKey, undefined);
-  // initPrompt 本地优先；写作草稿按 id 冲突另存（本地 + 归档冲突副本 + 归档新条目）
+  // initPrompt 本地优先；常用表达按 id 冲突另存（本地 + 归档冲突副本 + 归档新条目）
   assert.equal(store.initPrompt, '本地规则');
-  assert.equal(store.writingDrafts.length, 3);
-  assert.equal(store.writingDrafts[0].text, '本地稿');
-  assert.equal(store.writingDrafts[1].text, '归档稿');
-  assert.ok(store.writingDrafts[1].importedConflict);
-  assert.equal(store.writingDrafts[2].text, '新归档稿');
+  assert.equal(store.savedPhrases.length, 3);
+  assert.equal(store.savedPhrases[0].text, '本地稿');
+  assert.equal(store.savedPhrases[1].text, '归档稿');
+  assert.ok(store.savedPhrases[1].importedConflict);
+  assert.equal(store.savedPhrases[2].text, '新归档稿');
   // 会话真正入库
   assert.equal((await sessionOp({ op: 'get', key: 'post:2002' })).data.draft, '归档会话');
   assert.equal((await sessionOp({ op: 'get', key: 'post:2001' })).data.draft, '本地会话');
@@ -390,119 +386,24 @@ test('导入：密钥不落盘、本地配置优先、会话失败则整体不�
   await removeAllSessions();
 });
 
-// ================= D. 侧栏会话控制器（sidebar/sessions.js 集成） =================
-test('文稿备份冲突保留双方，预览和导入一致，重复导入不增加副本', async () => {
+test('旧备份里已不再支持的功能数据：预览写明跳过，导入不报错、不写入', async () => {
   await removeAllSessions();
-  const local = { id: 'doc-a', title: '本地标题', content: '本地修改', folder: '我的文章' };
-  const incoming = { ...local, title: '归档标题', content: '归档修改' };
-  const store = installChromeMock({ documents: { 'doc-a': local } });
-  const archive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
-    documents: { 'doc-a': incoming, 'doc-b': { id: 'doc-b', title: '参考', content: '正文', folder: '参考文章', kind: 'reference', sourceUrl: 'https://x.com/a/status/1' } }
-  } };
-  const preview = await previewBackup(archive);
-  assert.equal(preview.documents, 2);
-  assert.equal(preview.extra, 1);
-  assert.equal(preview.imported, 1);
-  assert.equal(Object.keys(store.documents).length, 1, '预览不得写入');
-  const result = await importBackup(archive);
-  assert.deepEqual(result.extra, preview.extra);
-  assert.equal(Object.keys(store.documents).length, 3);
-  assert.deepEqual(store.documents['doc-a'], local);
-  const copy = Object.values(store.documents).find(item => item.content === incoming.content);
-  assert.notEqual(copy.id, local.id);
-  assert.equal(store.documents[copy.id], copy);
-  assert.equal(copy.folder, incoming.folder);
-  const repeated = await previewBackup(archive);
-  assert.equal(repeated.extra, 0);
-  assert.equal(repeated.imported, 0);
-  assert.equal(repeated.skipped, 2);
-  await importBackup(archive);
-  assert.equal(Object.keys(store.documents).length, 3);
-  // Chrome storage can return fields in a different order from the archive.
-  store.documents = Object.fromEntries(Object.entries(store.documents).map(([id, item]) =>
-    [id, Object.fromEntries(Object.entries(item).reverse())]));
-  const reordered = await previewBackup(archive);
-  assert.equal(reordered.extra, 0);
-  assert.equal(reordered.skipped, 2);
-});
-
-test('非法文稿和超容量备份在写入前拒绝', async () => {
-  const document = { id: 'a', title: '标题', content: '正文', folder: '我的文章' };
-  const archive = documents => ({ format: 'babel-tower-backup', version: 1, sessions: [], storage: { documents } });
-  for (const value of [null, [], { ...document, id: 'other' }, { ...document, content: 42 }, { ...document, content: 'x'.repeat(200001) }]) {
-    assert.throws(() => validateBackup(archive({ a: value })), /文稿数据格式/);
-  }
-  const documents = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`d${i}`, { ...document, id: `d${i}` }]));
-  const store = installChromeMock({ documents });
-  const before = JSON.stringify(store);
-  await assert.rejects(previewBackup(archive({ a: document })), /超过 200/);
-  await assert.rejects(importBackup(archive({ a: document })), /超过 200/);
-  assert.equal(JSON.stringify(store), before);
-});
-
-test('备份导入和文稿保存同时发生，不覆盖导入期间的编辑', async () => {
-  await removeAllSessions();
-  const local = { id: 'race-local', title: '本地稿', content: '旧内容', folder: '我的文章', kind: 'draft', sourceUrl: '', revision: 1 };
-  const incoming = { id: 'race-import', title: '归档稿', content: '归档内容', folder: '我的文章' };
-  const store = installChromeMock({ documents: { [local.id]: local } });
-  const { agentOp } = await import('../services/pi-agent.js?backup-race-test');
-  const set = chrome.storage.local.set;
-  let started, release, held = false;
-  const pending = new Promise(resolve => { release = resolve; });
-  const reachedWrite = new Promise(resolve => { started = resolve; });
-  chrome.storage.local.set = async values => {
-    if (!held && values.documents?.[incoming.id]) { held = true; started(); await pending; }
-    return set(values);
+  const store = installChromeMock({});
+  const archive = {
+    format: 'babel-tower-backup', version: 1, createdAt: new Date().toISOString(),
+    dictionary: { action: 'reimport-mdx-original' }, sessions: [],
+    storage: { documents: { d1: { id: 'd1', title: 'x', content: 'y' } }, documentFolders: ['参考文章'], agentSessions: { a: {} },
+      growthMemories: [{ id: 'g' }], discoveryPrefs: { enabled: true }, writingDrafts: [{ id: 'w' }], savedPhrases: [{ id: 'p1', text: 'ok' }] }
   };
-  const importing = importBackup({ format: 'babel-tower-backup', version: 1, sessions: [], storage: { documents: { [incoming.id]: incoming } } });
-  let saving;
-  try {
-    await reachedWrite;
-    saving = agentOp({ action: 'SAVE_DOCUMENT', payload: { ...local, content: '导入期间的新编辑', expectedRevision: 1 } });
-    await sleep(20);
-  } finally { release(); await importing; if (saving) await saving; }
-  assert.equal(store.documents[local.id].content, '导入期间的新编辑');
-  assert.equal(store.documents[incoming.id].content, '归档内容');
-});
-
-test('备份中的特殊文稿 ID 正常导入，不误判为已有记录', async () => {
-  await removeAllSessions();
-  const store = installChromeMock({ documents: {} });
-  const documents = Object.fromEntries(['__proto__', 'constructor', 'toString'].map(id => [id, { id, title: id, content: '归档文稿', folder: '我的文章' }]));
-  const archive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: { documents } };
-  const preview = await previewBackup(archive);
-  assert.equal(preview.imported, 3);
-  assert.equal(preview.extra, 0);
+  const counts = validateBackup(archive);
+  assert.deepEqual(counts.unsupported.sort(), ['agentSessions', 'discoveryPrefs', 'documentFolders', 'documents', 'growthMemories', 'writingDrafts']);
   await importBackup(archive);
-  for (const id of Object.keys(documents)) {
-    assert(Object.hasOwn(store.documents, id));
-    assert.equal(store.documents[id].id, id);
-  }
-  assert.equal({}.content, undefined);
-});
-
-test('重复草稿与文件夹的导入预览一致，重试不再产生冲突副本', async () => {
+  assert.equal(store.savedPhrases.length, 1);
+  for (const key of ['documents', 'documentFolders', 'agentSessions', 'growthMemories', 'discoveryPrefs', 'writingDrafts']) assert.equal(store[key], undefined, key + ' 不应写入');
   await removeAllSessions();
-  const store = installChromeMock({ writingDrafts: [{ id: 'd1', text: '本地稿' }] });
-  const conflict = { id: 'd1', text: '归档修改', metadata: { a: 1, b: 2 } }, fresh = { id: 'd2', text: '新稿' };
-  const archive = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
-    writingDrafts: [conflict, conflict, fresh, fresh], documentFolders: ['归档', '归档'], initPrompt: ''
-  } };
-  const before = await previewBackup(archive);
-  assert.equal(before.imported, 2);
-  assert.equal(before.extra, 1);
-  assert.equal(before.skipped, 3);
-  const imported = await importBackup(archive);
-  assert.deepEqual([imported.imported, imported.extra, imported.skipped], [2, 1, 3]);
-  assert.equal(store.writingDrafts.length, 3);
-  assert.deepEqual(store.documentFolders, ['归档']);
-  store.writingDrafts.find(item => item.importedFromId === 'd1').metadata = { b: 2, a: 1 };
-  const again = await previewBackup(archive);
-  assert.deepEqual([again.imported, again.extra, again.skipped], [0, 0, 6]);
-  await importBackup(archive);
-  assert.equal(store.writingDrafts.length, 3);
 });
 
+// ================= D. 侧栏会话控制器（sidebar/sessions.js 集成） =================
 test('归档内同帖不同版本均保留，重复版本跳过，重复导入不增加会话副本', async () => {
   await removeAllSessions();
   installChromeMock({});
@@ -557,31 +458,6 @@ test('模型配置合并超过上限，在会话和本地数据写入前拒绝',
   await assert.rejects(importBackup(archive), /超过 40/);
   assert.equal(JSON.stringify(store), before);
   assert.equal((await sessionOp({ op: 'list' })).length, 0);
-});
-
-test('错误的文稿版本与助手历史，在预览和写入前明确拒绝', async () => {
-  await removeAllSessions();
-  const store = installChromeMock({ documents: {}, initPrompt: '保留本地规则' });
-  const document = { id: 'broken-document', title: '文稿', content: '正文', folder: '我的文章', revision: 'invalid' };
-  const archives = [
-    { documents: { [document.id]: document } },
-    { agentSessions: { broken: null } },
-    { agentSessions: { broken: { id: 'broken', messages: 'not-an-array' } } },
-    { agentSessions: { broken: { id: 'other', messages: [] } } }
-  ];
-  const before = JSON.stringify(store);
-  for (const storage of archives) {
-    const archive = { format: 'babel-tower-backup', version: 1, sessions: [], storage };
-    await assert.rejects(previewBackup(archive), /文稿|助手会话/);
-    await assert.rejects(importBackup(archive), /文稿|助手会话/);
-    assert.equal(JSON.stringify(store), before);
-  }
-  assert.throws(() => validateBackup({ format: 'babel-tower-backup', version: 1, sessions: [], storage: [] }), /不是支持/);
-  const valid = { format: 'babel-tower-backup', version: 1, sessions: [], storage: {
-    documents: { legacy: { id: 'legacy', title: '旧版文稿', content: '正文', folder: '我的文章' } },
-    agentSessions: { legacy: { id: 'legacy', messages: [{ role: 'assistant', content: '旧版回复' }] } }
-  } };
-  assert.equal(validateBackup(valid).documents, 1, '旧版文稿没有 revision 仍可恢复');
 });
 
 const POST_A = { url: 'https://x.com/alice/status/111?s=20', text: '正文A', author: 'alice' };
@@ -988,7 +864,7 @@ test('导出→导入完整回环：会话跨安装一致，归档不含任何�
   installChromeMock({
     settings: { modelProvider: 'openai', providers: { openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-luna', apiKey: 'sk-DONTLEAK' } } },
     apiKeys: { openai: 'sk-DONTLEAK2' },
-    initPrompt: '规则', writingDrafts: [{ id: 'w9', text: '稿' }], cards: [], growthMemories: [], savedPhrases: []
+    initPrompt: '规则', savedPhrases: [{ id: 'w9', text: '稿' }], cards: []
   });
   const archive = await exportBackup();
   const json = JSON.stringify(archive);
@@ -1001,7 +877,7 @@ test('导出→导入完整回环：会话跨安装一致，归档不含任何�
   assert.equal(result.sessions, 1);
   assert.equal((await sessionOp({ op: 'get', key: 'post:3001' })).data.draft, '导出稿');
   assert.equal((await sessionOp({ op: 'get', key: 'post:3001' })).data.practiceAnswer, '导出作答');
-  assert.equal(fresh.writingDrafts[0].text, '稿');
+  assert.equal(fresh.savedPhrases[0].text, '稿');
   assert.equal(fresh.settings.providers.openai.apiKey, undefined, '导入的配置剥掉密钥');
   assert.match(result.dictionary, /MDX.*重新导入/);
   await removeAllSessions();

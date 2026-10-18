@@ -1,4 +1,3 @@
-import { safeAgentEndpoint } from './agent-data.js';
 import { DEFAULT_SETTINGS, PROVIDERS, normalizeBaseUrl } from '../shared.js';
 
 const safeId = id => /^[a-z][a-z0-9_-]{0,79}$/.test(id) && !['constructor', 'prototype', '__proto__'].includes(id);
@@ -41,11 +40,6 @@ export function normalizeSettings(stored = {}) {
   const result = { ...DEFAULT_SETTINGS, ...source, schemaVersion: 2, providers,
     modelProvider: Object.hasOwn(providers, source.modelProvider) ? source.modelProvider : 'openai',
     autoTranslate: source.autoTranslate !== false, hoverLookup: source.hoverLookup !== false };
-  if (result.agentProvider !== 'pi') {
-    result.agentProvider = 'pi';
-    result.agentBaseUrl = DEFAULT_SETTINGS.agentBaseUrl;
-    result.agentModel = '';
-  }
   // 密钥永远不放进 settings 对象：即使旧数据/归档把密钥混进了 settings，导出与展示也不携带
   for (const secret of ['apiKeys', 'apiKey', 'openaiKey', 'jevKey', 'agentKey', 'key']) delete result[secret];
   return result;
@@ -87,12 +81,11 @@ export async function readApiKeys(storage) {
 
 export async function publicSettings(storage) {
   const [settings, apiKeys] = await Promise.all([readSettings(storage), readApiKeys(storage)]);
-  const { jevKey = '', glossary = {} } = await storage.get(['jevKey', 'glossary']);
+  const { glossary = {} } = await storage.get('glossary');
   return {
     ...settings,
     hasModel: Boolean(apiKeys[settings.modelProvider]),
     hasOpenAI: Boolean(apiKeys.openai),
-    hasJev: Boolean(jevKey),
     glossaryCount: Object.keys(glossary).length
   };
 }
@@ -102,18 +95,11 @@ export async function saveSettings(payload, storage) {
   const previous = await readSettings(storage);
   const settings = {
     schemaVersion: 2,
-    agentProvider: 'pi',
-    agentBaseUrl: safeAgentEndpoint('pi', payload.agentBaseUrl ?? previous.agentBaseUrl),
-    agentModel: clean(payload.agentModel ?? previous.agentModel, 120),
     autoTranslate: payload.autoTranslate ?? previous.autoTranslate,
     hoverLookup: payload.hoverLookup ?? previous.hoverLookup,
     modelProvider: payload.modelProvider || previous.modelProvider,
     providers: {},
-    targetLanguage: clean(payload.targetLanguage || '英语', 30),
-    filterEnabled: Boolean(payload.filterEnabled),
-    filterRules: Array.isArray(payload.filterRules) ? payload.filterRules.slice(0, 8).map((rule, index) => ({ id: clean(rule.id || `rule-${index}`, 40), text: clean(rule.text, 180), enabled: Boolean(rule.enabled) })).filter(rule => rule.text) : [],
-    filterThreshold: Math.max(0.65, Math.min(0.98, Number(payload.filterThreshold) || DEFAULT_SETTINGS.filterThreshold)),
-    filterDailyLimit: Math.max(10, Math.min(200, Number(payload.filterDailyLimit) || 80))
+    targetLanguage: clean(payload.targetLanguage || '英语', 30)
   };
   settings.providers = validateProviders(payload.providers || previous.providers);
   if (!Object.hasOwn(settings.providers, settings.modelProvider)) throw new Error('当前模型配置不存在。');
@@ -126,9 +112,7 @@ export async function saveSettings(payload, storage) {
     if (key) apiKeys[id] = key; else delete apiKeys[id];
   }
   for (const id of Object.keys(apiKeys)) if (!Object.hasOwn(settings.providers, id)) delete apiKeys[id];
-  const jevKey = payload.jevKey === undefined ? (await storage.get('jevKey')).jevKey || '' : clean(payload.jevKey, 250);
-  const agentKey = payload.agentKey === undefined ? (await storage.get('agentKey')).agentKey || '' : clean(payload.agentKey, 500);
-  await storage.set({ settings, apiKeys, jevKey, agentKey });
+  await storage.set({ settings, apiKeys });
   await storage.remove('openaiKey'); // 已并入 apiKeys
   return publicSettings(storage);
 }

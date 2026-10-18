@@ -195,32 +195,21 @@ function optionIn(select, value, text) {
 
 function buildDocument() {
   const doc = new FakeDocument();
-  for (const tab of ['home', 'preferences', 'agent', 'filters', 'saved', 'dictionary', 'data']) {
+  for (const tab of ['home', 'preferences', 'saved', 'dictionary', 'data']) {
     const button = element(doc, 'button', { dataset: { tab } });
     if (tab === 'home') button.className = 'active';
   }
-  for (const panel of ['home', 'preferences', 'agent', 'filters', 'saved', 'dictionary', 'data']) {
+  for (const panel of ['home', 'preferences', 'saved', 'dictionary', 'data']) {
     element(doc, 'section', { dataset: { panel }, hidden: panel !== 'home' });
   }
-  element(doc, 'input', { id: 'agent-base-url' });
-  element(doc, 'input', { id: 'agent-model' });
-  element(doc, 'input', { id: 'agent-key', type: 'password' });
-  element(doc, 'button', { id: 'test-agent' });
-  element(doc, 'div', { id: 'agent-connection' });
-  const agentSelect = element(doc, 'select', { id: 'agent-provider' });
-  optionIn(agentSelect, 'pi');
   element(doc, 'input', { id: 'provider-label' });
   element(doc, 'input', { id: 'provider-base-url' });
   element(doc, 'input', { id: 'provider-model' });
   element(doc, 'input', { id: 'provider-key', type: 'password' });
-  element(doc, 'input', { id: 'jev-key', type: 'password' });
-  element(doc, 'input', { id: 'filter-limit', type: 'number', value: '80' });
-  element(doc, 'input', { id: 'filter-threshold', type: 'range', value: '82' });
   element(doc, 'input', { id: 'glossary-file', type: 'file' });
   element(doc, 'input', { id: 'import-backup', type: 'file' });
   element(doc, 'input', { id: 'auto-translate', type: 'checkbox', checked: true });
   element(doc, 'input', { id: 'hover-lookup', type: 'checkbox', checked: true });
-  element(doc, 'input', { id: 'filter-enabled', type: 'checkbox' });
 
   const providerSelect = element(doc, 'select', { id: 'model-provider' });
   optionIn(providerSelect, 'chat', 'Chat Completions');
@@ -235,14 +224,14 @@ function buildDocument() {
   }
   languageSelect.value = '英语';
 
-  for (const id of ['add-provider', 'delete-provider', 'test-model', 'add-rule', 'refresh-jev',
-    'save-main', 'save-filter', 'export-saved', 'open-mdx-import', 'export-backup',
+  for (const id of ['add-provider', 'delete-provider', 'test-model',
+    'save-main', 'export-saved', 'open-mdx-import', 'export-backup',
     'confirm-import', 'refresh-sessions']) {
     element(doc, 'button', { id });
   }
   element(doc, 'input', { id: 'session-search', type: 'search' });
-  for (const id of ['status', 'rules', 'jev-diagnostics', 'test-result', 'active-config', 'mdx-root',
-    'saved-list', 'session-list', 'backup-preview', 'glossary-count', 'threshold-label', 'model-hint',
+  for (const id of ['status', 'test-result', 'active-config', 'mdx-root',
+    'saved-list', 'session-list', 'backup-preview', 'glossary-count', 'model-hint',
     'settings-dirty-status', 'settings-save-hint']) {
     element(doc, id === 'test-result' ? 'span' : 'div', { id });
   }
@@ -348,8 +337,6 @@ async function route(page, message) {
         jevKey: page.store.jevKey || '',
         glossaryCount: 0
       };
-    case 'JEV_STATUS':
-      return { state: 'disabled', enabled: false, used: 0, dailyLimit: 80, stats: {}, cacheCount: 0 };
     case 'LIST_CARDS': return [];
     case 'SESSION': return [];
     case 'IMPORT_GLOSSARY': return { count: 0 };
@@ -436,10 +423,6 @@ function seedSettings(overrides = {}) {
     },
     autoTranslate: true,
     hoverLookup: true,
-    filterEnabled: false,
-    filterRules: [],
-    filterThreshold: 0.82,
-    filterDailyLimit: 80,
     ...overrides
   };
 }
