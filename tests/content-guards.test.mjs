@@ -11,10 +11,7 @@ const CONTENT_SCRIPTS = [
   'content.js',
   'sidebar/sidebar.js',
   'modules/reading/reading.js',
-  'modules/reply/reply.js',
-  'modules/practice/practice.js',
-  'modules/growth/growth.js',
-  'modules/discovery/discovery.js'
+  'modules/reply/reply.js'
 ];
 const readContent = () => CONTENT_SCRIPTS.map(read).join('\n');
 const readReply = () => ['sidebar/sidebar.js', 'modules/reply/reply.js'].map(read).join('\n');
@@ -39,14 +36,7 @@ test('promptFor uses assertTextLimit for context/source/text (no silent clean tr
   assert(bg.includes("assertTextLimit(payload?.text, '你的输入', MAX_DRAFT_CHARS)"));
   assert(!bg.includes('clean(payload?.context, 2200)'), '旧 2200 截断必须移除');
   assert(!bg.includes('clean(payload?.source, 2500)'), '旧 2500 截断必须移除');
-  assert(bg.includes("'CHECK_WRITING'") && bg.includes("'LEARN_EXPRESSIONS'"));
-});
-
-test('FEEDBACK_SCHEMA is layered: meaningNote + grammarNote + points.kind unchanged', () => {
-  const bg = read('background.js');
-  assert(bg.includes("meaningNote: { type: 'string' }"));
-  assert(bg.includes("grammarNote: { type: 'string' }"));
-  assert(bg.includes("enum: ['fix', 'polish', 'keep']"), 'points[].kind 语义保持 fix/polish/keep');
+  assert(!bg.includes("'CHECK_WRITING'") && !bg.includes("'LEARN_EXPRESSIONS'"), '未接 UI 的 AI 任务已删除');
 });
 
 test('content scripts capture full X material (no 2500/350 silent slice)', () => {
@@ -76,16 +66,6 @@ test('content scripts guard in-flight model results with seq + snapshot + candid
   assert(content.includes('state.draftCandidate'), '候选草稿区');
   assert(content.includes('snapshot.idea !== state.idea') || content.includes('state.idea !== snapshot.idea'), '输入变化不覆盖');
   assert(content.includes('compositionstart') && content.includes('compositionend'), 'IME 组合态延迟渲染');
-});
-
-test('layered feedback renderer produces three separate blocks', () => {
-  const shell = read('sidebar/sidebar.js');
-  assert(shell.includes('bx-layer-meaning'));
-  assert(shell.includes('bx-layer-grammar'));
-  assert(shell.includes('bx-layer-polish'));
-  assert(shell.includes('意思是否传达'));
-  assert(shell.includes('语法问题'));
-  assert(shell.includes('表达润色'));
 });
 
 test('write mode textareas stay editable and errors preserve input', () => {

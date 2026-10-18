@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  matchingRule, normalizeWord, parseGlossary, responseText,
+  normalizeWord, parseGlossary, responseText,
   assertTextLimit, normalizeBaseUrl, joinUrl, permissionOrigin,
   buildChatRequest, chatText, extractJson, classifyModelHttpError,
-  validateJevAnswers, assertStructuredResult,
+  assertStructuredResult,
   MAX_REFERENCE_CHARS, MAX_DRAFT_CHARS, PROVIDERS, PROVIDER_IDS
 } from '../shared.js';
 
@@ -15,13 +15,6 @@ test('a dictionary backup is not treated as a word list', () => {
 test('local glossary accepts TSV and ignores unsafe terms', () => {
   assert.deepEqual(parseGlossary('hello\t你好\nworld,世界\n<script>,bad', 'words.tsv'), { hello: '你好', world: '世界' });
   assert.equal(normalizeWord('  HELLO!  '), 'hello');
-});
-
-test('Jev collapses only a clear match', () => {
-  const rules = [{ text: '引战' }, { text: '加密货币广告' }];
-  const answers = { rule_0: { noul: 0.72 }, rule_1: { noul: 0.91 } };
-  assert.equal(matchingRule(answers, rules, 0.82)?.rule.text, '加密货币广告');
-  assert.equal(matchingRule(answers, rules, 0.95), null);
 });
 
 test('raw Responses API output text is collected across messages', () => {
@@ -112,16 +105,6 @@ test('chat request shape follows each provider protocol', () => {
   assert.equal(glm.thinking, undefined);
   const legacy = buildChatRequest({ instructions: 'i', input: 'x', maxOutputTokens: 64 });
   assert.equal(legacy.max_tokens, 64); // 不传 provider 时保持旧行为
-});
-
-test('malformed Jev answers are failures, not cached non-matches', () => {
-  assert.throws(() => validateJevAnswers({}, 1), error => error.code === 'bad_response');
-  assert.throws(() => validateJevAnswers({ answers: {} }, 1), error => error.code === 'bad_response');
-  assert.throws(() => validateJevAnswers({ answers: { rule_0: { noul: 'x' } } }, 1), error => error.code === 'bad_response');
-  assert.throws(() => validateJevAnswers(null, 1), error => error.code === 'bad_response');
-  assert.equal(validateJevAnswers({ answers: { rule_0: { type: 'noul', noul: 0.9 } } }, 1), true);
-  // 某条规则缺项按不命中处理，但至少要有一条有效概率
-  assert.equal(validateJevAnswers({ answers: { rule_0: { noul: 0.1 } } }, 2), true);
 });
 
 test('structured model results must contain required fields of the right type', () => {

@@ -24,14 +24,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     glm: { baseUrl: PROVIDERS.glm.baseUrl, model: PROVIDERS.glm.model }
   },
   model: 'gpt-6-luna', // legacy field, migrated into providers.openai.model on first load
-  targetLanguage: '英语',
-  agentProvider: 'pi',
-  agentBaseUrl: 'http://127.0.0.1:4097',
-  agentModel: '',
-  filterEnabled: false,
-  filterRules: [],
-  filterThreshold: 0.82,
-  filterDailyLimit: 80
+  targetLanguage: '英语'
 });
 
 /** 硬性规格：参考材料与用户草稿分别 ≤ 20,000 字符，超限报错，禁止静默截断。（MAX_* 常量在文件顶部，全仓唯一一份） */
@@ -145,30 +138,6 @@ export function classifyModelHttpError(status, providerLabel, bodyText = '') {
 export function normalizeWord(value) {
   const word = String(value || '').trim().toLowerCase().replace(/^[\s"'“”‘’.,!?;:()]+|[\s"'“”‘’.,!?;:()]+$/g, '');
   return /^[a-z][a-z'-]{0,47}$/.test(word) ? word : '';
-}
-
-export function matchingRule(answers, rules, threshold) {
-  const matches = rules.map((rule, index) => ({ rule, probability: Number(answers?.[`rule_${index}`]?.noul ?? 0) }));
-  return matches.filter(item => Number.isFinite(item.probability) && item.probability >= threshold).sort((a, b) => b.probability - a.probability)[0] || null;
-}
-
-/** 校验 TypeSafe/Jev 答案结构：HTTP 200 但缺 answers/概率的响应必须当失败，不能当「未命中」缓存。 */
-export function validateJevAnswers(data, ruleCount) {
-  const bad = message => { const error = new Error(message); error.code = 'bad_response'; return error; };
-  const answers = data?.answers;
-  if (!answers || typeof answers !== 'object' || Array.isArray(answers)) {
-    throw bad('Jev 返回格式异常（缺少 answers 字段），本次结果不采信。');
-  }
-  let valid = 0;
-  for (let i = 0; i < ruleCount; i++) {
-    const entry = answers[`rule_${i}`];
-    if (entry == null) continue; // 缺失的规则按不命中处理，但至少要有一条有效概率
-    const noul = Number(entry?.noul);
-    if (!Number.isFinite(noul)) throw bad(`Jev 返回格式异常（rule_${i} 的 noul 不是数字），本次结果不采信。`);
-    valid++;
-  }
-  if (ruleCount > 0 && valid === 0) throw bad('Jev 返回格式异常（answers 里没有任何有效概率），本次结果不采信。');
-  return true;
 }
 
 /** 结构化模型结果的最小 schema 校验：必需字段缺失或类型不符一律当失败，不渲染残缺结果。 */

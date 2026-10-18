@@ -2,6 +2,16 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。每个版本合并到 `main` 并通过测试后，由 GitHub Actions 发布到 [Releases](https://github.com/Kevin-Yixuan/babel-tower-backtranslation/releases)。
 
+## [0.6.0] 瘦身版
+
+只做「在 X 页面上读懂外语、说出地道的外语，并用回译确认意思」。
+
+- **删除**：Markdown 写作台、Agent 页签与 Pi 桥接（含「让 Pi 润色」「保存全文到写作台」）、Jev 发现与筛选、回译练习、成长记忆、未接 UI 的 `CHECK_WRITING` / `LEARN_EXPRESSIONS` 任务。
+- **保留**：翻译、回复与回译（含 0.5.0 的粘贴式插入）、划词/悬停查词与离线 MDX 词典、收藏表达、按帖会话持久化、模型连接与设置。
+- **权限**：移除 `api.typesafe.ai` 主机权限和 `127.0.0.1` 可选权限。
+- **备份**：不再导出文稿、Agent 会话、筛选与成长数据；导入旧备份时遇到这些键会跳过并在预览里写明，不报错。旧存储键不会被主动删除。
+- **测试**：删除写作台、Pi、Jev、成长相关测试；浏览器端到端脚本中仍依赖已删功能的几份（smoke、adversarial-smoke、timeline、redesign-smoke、release-regressions）一并删除，需要时再按新范围重写。
+
 ## [0.5.0] 侧栏 Pi Agent 与新界面
 
 - **插入不再重复显示**：X 发帖框是受控编辑器，原先的插入方式会让浏览器和编辑器各写一次，界面上同一段文字可能出现一遍或两遍（发布内容是正确的）。现在以粘贴方式交给编辑器自己渲染；普通编辑框仍回退到原插入方式。插入前确认、跨帖拒绝、非空追加的规则不变，插件仍不会点击发布。

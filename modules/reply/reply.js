@@ -6,8 +6,7 @@
 //  2) 统一回复结果呈现顺序固定：①完整回复（进入可编辑草稿区）→ ②中文回译 → ③意思风险
 //     → ④逐项修改建议 → ⑤后续交流建议；
 //  3) 全局 init prompt（STORE 键 initPrompt）编辑与恢复默认——只作风格层，输出 schema 固定；
-//  4) 稿件来源铁律（协议 §5）：生成/采用后未手改=ai，任何亲手键入=user；检查完成时上报
-//     user-draft（BX.emit + DOM 事件镜像，供跨世界观察）。
+//  4) 稿件来源铁律（协议 §5）：生成/采用后未手改=ai，任何亲手键入=user。
 (() => {
   const BX = window.BX;
   const { state, esc, send, statusHTML, util, register, busy: withBusy } = BX;
@@ -34,17 +33,8 @@
     if (!b?.post) return '尚未确定回复对象';
     return `@${b.post.author || '当前作者'} ${b.post.text.slice(0, 40)}`;
   };
-  // 稿件来源铁律（协议 §5）：生成/采用后未再亲手修改 = ai，不得被 growth 当作用户掌握的证据。
-  const draftOrigin = () => state.reply?.origin || 'user';
+  // 稿件来源铁律（协议 §5）：生成/采用后未再亲手修改 = ai，保留来源标记。
   const markEdited = () => { state.reply = { ...(state.reply || {}), origin: 'user' }; };
-
-  // 检查完成 = 用户提交了一份稿件：按当时 origin 如实上报给 growth。
-  const emitUserDraft = (text, origin, url) => {
-    const payload = { text, origin, context: 'reply', url, at: Date.now() };
-    BX.emit('user-draft', payload);
-    // 镜像为 DOM 事件（JSON 字符串载荷）：页面世界看不到 BX（内容脚本隔离世界），测试与调试据此观察。
-    try { document.dispatchEvent(new CustomEvent('bx-user-draft', { detail: JSON.stringify(payload) })); } catch { /* 观察通道失败不影响主流程 */ }
-  };
 
   // 生成/检查共用：完整回复进入草稿区（调用方已做快照核对），其余四要素进统一结果区。
   // 交叉修复（integration 合并轮）：检查会把①完整回复写入草稿区，用户提交的原文必须保留对照，
@@ -111,7 +101,7 @@
       <textarea id="bx-init-prompt-text" rows="7">${esc(initText)}</textarea>
       <div class="bx-actions bx-actions-tight"><button class="bx-primary" id="bx-init-prompt-save">保存提示词</button><button id="bx-init-prompt-reset">恢复默认</button></div></details>`;
 
-    container.innerHTML = `<section class="bx-section"><div class="bx-kicker">跨语言沟通</div><h2>先把想法说清楚</h2><p class="bx-subtle">可以用中文写意图。生成期间也能继续改；生成失败或结果过期都不会清空/覆盖已输入内容。</p>${state.post?.text ? `<div class="bx-context">回复对象：${esc(state.post.author || '')} · ${esc(state.post.text.slice(0, 230))}</div>` : ''}${draftStale ? '<div class="bx-status bx-error">这份草稿是为上一个回复对象写的，不能插入当前对象；可复制后手动处理。</div>' : ''}<div class="bx-two"><div class="bx-field"><label for="bx-language">目标语言</label><select id="bx-language">${languages.map(x => `<option ${state.target === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div><div class="bx-field"><label for="bx-tone">语气</label><select id="bx-tone">${['自然', '友好', '简洁', '正式'].map(x => `<option ${state.tone === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div><label class="bx-label" for="bx-idea">我想表达</label><textarea id="bx-idea" placeholder="例如：我认同这一点，但想补充自己的经历……">${esc(state.idea)}</textarea>${lengthMeta('idea', state.idea)}<button class="bx-primary bx-wide" id="bx-generate" ${!state.idea.trim() || editorBusy ? 'disabled' : ''}>生成目标语言草稿</button><button class="bx-wide" id="bx-suggest-angles" ${editorBusy || !(state.post?.text || '').trim() ? 'disabled' : ''}>没想法？看看基于帖文的回应角度</button>${anglesHTML}<label class="bx-label" for="bx-draft">① 完整回复 · 可直接使用，也可自己改</label><textarea id="bx-draft" placeholder="生成后这里是完整可用的回复；也可以直接在这里写目标语言，再请模型检查。">${esc(state.draft)}</textarea>${lengthMeta('draft', state.draft)}${state.draftNote ? `<p class="bx-subtle">措辞说明：${esc(state.draftNote)}</p>` : ''}${resultHTML}${candidate ? `<div class="bx-candidate" role="status"><div class="bx-result-title">模型候选草稿 <small>你的当前输入没有被覆盖</small></div><p>${esc(candidate.text)}</p>${candidate.note ? `<small>${esc(candidate.note)}</small>` : ''}<div class="bx-actions bx-actions-tight"><button id="bx-adopt-candidate">采用为草稿</button><button id="bx-dismiss-candidate">忽略</button></div></div>` : ''}<div class="bx-actions"><button id="bx-check-reply" ${!state.draft.trim() || editorBusy ? 'disabled' : ''}>检查意思与表达</button><button id="bx-insert" ${!state.draft.trim() || editorBusy || draftStale ? 'disabled' : ''}>插入 X 草稿</button><button id="bx-copy-draft" ${!state.draft.trim() ? 'disabled' : ''}>复制草稿</button><button id="bx-ask-pi" ${!state.draft.trim() ? 'disabled' : ''}>让 Pi 润色</button></div>${draftStale ? '<p class="bx-subtle">插入已停用：草稿与当前回复对象不一致。复制按钮仍可用。</p>' : ''}${confirmBox}${promptBox}${statusHTML()}</section>`;
+    container.innerHTML = `<section class="bx-section"><div class="bx-kicker">跨语言沟通</div><h2>先把想法说清楚</h2><p class="bx-subtle">可以用中文写意图。生成期间也能继续改；生成失败或结果过期都不会清空/覆盖已输入内容。</p>${state.post?.text ? `<div class="bx-context">回复对象：${esc(state.post.author || '')} · ${esc(state.post.text.slice(0, 230))}</div>` : ''}${draftStale ? '<div class="bx-status bx-error">这份草稿是为上一个回复对象写的，不能插入当前对象；可复制后手动处理。</div>' : ''}<div class="bx-two"><div class="bx-field"><label for="bx-language">目标语言</label><select id="bx-language">${languages.map(x => `<option ${state.target === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div><div class="bx-field"><label for="bx-tone">语气</label><select id="bx-tone">${['自然', '友好', '简洁', '正式'].map(x => `<option ${state.tone === x ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div><label class="bx-label" for="bx-idea">我想表达</label><textarea id="bx-idea" placeholder="例如：我认同这一点，但想补充自己的经历……">${esc(state.idea)}</textarea>${lengthMeta('idea', state.idea)}<button class="bx-primary bx-wide" id="bx-generate" ${!state.idea.trim() || editorBusy ? 'disabled' : ''}>生成目标语言草稿</button><button class="bx-wide" id="bx-suggest-angles" ${editorBusy || !(state.post?.text || '').trim() ? 'disabled' : ''}>没想法？看看基于帖文的回应角度</button>${anglesHTML}<label class="bx-label" for="bx-draft">① 完整回复 · 可直接使用，也可自己改</label><textarea id="bx-draft" placeholder="生成后这里是完整可用的回复；也可以直接在这里写目标语言，再请模型检查。">${esc(state.draft)}</textarea>${lengthMeta('draft', state.draft)}${state.draftNote ? `<p class="bx-subtle">措辞说明：${esc(state.draftNote)}</p>` : ''}${resultHTML}${candidate ? `<div class="bx-candidate" role="status"><div class="bx-result-title">模型候选草稿 <small>你的当前输入没有被覆盖</small></div><p>${esc(candidate.text)}</p>${candidate.note ? `<small>${esc(candidate.note)}</small>` : ''}<div class="bx-actions bx-actions-tight"><button id="bx-adopt-candidate">采用为草稿</button><button id="bx-dismiss-candidate">忽略</button></div></div>` : ''}<div class="bx-actions"><button id="bx-check-reply" ${!state.draft.trim() || editorBusy ? 'disabled' : ''}>检查意思与表达</button><button id="bx-insert" ${!state.draft.trim() || editorBusy || draftStale ? 'disabled' : ''}>插入 X 草稿</button><button id="bx-copy-draft" ${!state.draft.trim() ? 'disabled' : ''}>复制草稿</button></div>${draftStale ? '<p class="bx-subtle">插入已停用：草稿与当前回复对象不一致。复制按钮仍可用。</p>' : ''}${confirmBox}${promptBox}${statusHTML()}</section>`;
 
     const idea = container.querySelector('#bx-idea'), draft = container.querySelector('#bx-draft');
     idea.oninput = () => {
@@ -130,7 +120,6 @@
       container.querySelector('#bx-check-reply').disabled = blocked;
       container.querySelector('#bx-insert').disabled = blocked || draft.value.length > MAX_WRITE;
       container.querySelector('#bx-copy-draft').disabled = !draft.value.trim();
-      container.querySelector('#bx-ask-pi').disabled = !draft.value.trim();
     };
     container.querySelector('#bx-language').onchange = event => { state.target = event.target.value; };
     container.querySelector('#bx-tone').onchange = event => { state.tone = event.target.value; };
@@ -165,7 +154,6 @@
       }
       // 先按被检查稿件当时的 origin 上报（手改=user / 未手改=ai），再把完整回复更新进草稿区；
       // 用户提交的原文随结果区保留（originalText），可随时对照，不会被覆盖丢失。
-      emitUserDraft(snapshot.draft, draftOrigin(), snapshot.postUrl);
       applyUnifiedResult(result, 'check', snapshot.draft);
       state.notice = '检查完成：①完整回复已进入草稿区（可继续手改）；你提交的原文保留在结果区顶部，下方是中文回译与具体改法。';
     });
@@ -192,10 +180,6 @@
       };
     });
 
-    container.querySelector('#bx-ask-pi').onclick = () => BX.emit('agent-prefill', {
-      text: '润色我的回复草稿，让它更地道自然，保留原意；先给改后的完整文本，再用中文简要说明改了什么。',
-      context: ['draft', 'post']
-    });
     container.querySelector('#bx-insert').onclick = () => { state.binding = resolveInsertTarget(); state.insertConfirm = true; state.error = ''; BX.refresh(); };
     container.querySelector('#bx-insert-confirm')?.addEventListener('click', performInsert);
     container.querySelector('#bx-insert-cancel')?.addEventListener('click', () => { state.insertConfirm = false; BX.refresh(); });

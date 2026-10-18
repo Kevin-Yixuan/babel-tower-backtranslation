@@ -1,4 +1,3 @@
-import { safeAgentEndpoint } from './services/agent-data.js';
 import { DEFAULT_SETTINGS, PROVIDERS, parseGlossary, normalizeBaseUrl, permissionOrigin } from './shared.js';
 import { flashModelSuggestion } from './services/settings.js';
 import { mountDictionaryPanel } from './mdx/dictionary-panel.js';
@@ -12,7 +11,6 @@ const send = (action, payload = {}) => new Promise((resolve, reject) => {
   });
 });
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-let rules = [];
 // provider drafts hold form state per provider so switching tabs never loses input
 const providerDrafts = {};
 let loadedSettings; // 最近一次「生效」的设置；未保存的表单改动不写入这里
@@ -44,32 +42,17 @@ function switchTab(tab) {
   document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== tab);
   status('');
   if (tab === 'saved') loadSaved();
-  if (tab === 'filters') refreshJevDiagnostics();
 }
 document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => switchTab(button.dataset.tab));
 
 // 表单编辑统一走这里：既标记未保存，也让在途连接测试作废。
 for (const selector of ['#provider-label', '#provider-kind', '#provider-base-url', '#provider-model', '#provider-key',
-  '#agent-provider', '#agent-base-url', '#agent-model', '#agent-key', '#model-provider', '#target-language', '#auto-translate', '#hover-lookup', '#jev-key',
-  '#filter-enabled', '#filter-threshold', '#filter-limit']) {
+  '#model-provider', '#target-language', '#auto-translate', '#hover-lookup']) {
   const node = document.querySelector(selector);
   if (!node) continue;
   node.addEventListener('input', markFormEdit);
   node.addEventListener('change', markFormEdit);
 }
-
-function renderRules() {
-  $('#rules').innerHTML = rules.length ? rules.map((rule, index) => `<div class="rule"><input type="checkbox" data-rule-enabled="${index}" ${rule.enabled ? 'checked' : ''} aria-label="启用此规则"><input type="text" data-rule-text="${index}" value="${esc(rule.text)}" placeholder="描述想折叠的帖子" maxlength="180"><button data-rule-delete="${index}" aria-label="删除规则">×</button></div>`).join('') : '<p class="hint">还没有规则。点击“添加”，用一句话描述想折叠的内容。</p>';
-  document.querySelectorAll('[data-rule-enabled]').forEach(input => input.onchange = () => { rules[Number(input.dataset.ruleEnabled)].enabled = input.checked; markFormEdit(); });
-  document.querySelectorAll('[data-rule-text]').forEach(input => input.oninput = () => { rules[Number(input.dataset.ruleText)].text = input.value; markFormEdit(); });
-  document.querySelectorAll('[data-rule-delete]').forEach(button => button.onclick = () => { rules.splice(Number(button.dataset.ruleDelete), 1); markFormEdit(); renderRules(); });
-}
-$('#add-rule').onclick = () => {
-  if (rules.length >= 8) { status('最多添加 8 条规则。', true); return; }
-  rules.push({ id: crypto.randomUUID(), text: '', enabled: true }); markFormEdit(); renderRules();
-  document.querySelector('[data-rule-text]:last-of-type')?.focus();
-};
-$('#filter-threshold').oninput = () => { $('#threshold-label').textContent = `${$('#filter-threshold').value}%`; };
 
 // ---------- provider fields ----------
 
@@ -161,30 +144,6 @@ function ensureOriginSyncCheck(baseUrl) {
   normalizeBaseUrl(baseUrl);
 }
 
-// ---------- Jev diagnostics ----------
-
-async function refreshJevDiagnostics() {
-  const box = $('#jev-diagnostics');
-  try {
-    const data = await send('JEV_STATUS');
-    const s = data.stats || {};
-    const stateLabel = { disabled: '未开启', no_key: '缺 Jev 密钥', limited: '今日已达上限', ok: '已开启' }[data.state] || (data.enabled ? '已开启' : '未开启');
-    const judged = s.judged ?? 0;
-    const parts = [
-      `状态：${stateLabel}`,
-      `今日 API 请求 ${data.used}/${data.dailyLimit}（实际发出的请求，含重试）`,
-      `已判断 ${judged} · 未命中 ${Math.max(0, judged - (s.collapsed ?? 0))}`,
-      `命中折叠 ${s.collapsed ?? 0}`,
-      `跳过 ${s.skipped ?? 0}`,
-      `缓存命中 ${s.cached ?? 0}（缓存 ${data.cacheCount} 条）`,
-      `失败 ${s.failed ?? 0}`,
-      `达上限 ${s.limited ?? 0}`
-    ];
-    box.innerHTML = `<p class="hint">${parts.join(' · ')}</p>${s.lastError ? `<p class="hint" style="color:#a05240">最近错误：${esc(s.lastError)}</p>` : ''}<p class="hint">命中只折叠并可展开；失败会自动重试 2 次，仍失败的帖子标记为失败并计入此处。每日上限按实际 API 请求数硬性封顶。</p>`;
-  } catch (error) { box.innerHTML = `<p class="hint" style="color:#a05240">${esc(error.message)}</p>`; }
-}
-$('#refresh-jev').onclick = refreshJevDiagnostics;
-
 // ---------- save / load ----------
 
 async function settingsPayload() {
@@ -197,29 +156,20 @@ async function settingsPayload() {
     apiKeys[id] = draft.key || ''; // always send all slots so clearing a field actually deletes the stored key
   }
   return {
-    agentProvider: $('#agent-provider').value,
-    agentBaseUrl: safeAgentEndpoint($('#agent-provider').value, $('#agent-base-url').value),
-    agentModel: $('#agent-model').value, agentKey: $('#agent-key').value,
     modelProvider: activeProvider(),
     autoTranslate: $('#auto-translate').checked, hoverLookup: $('#hover-lookup').checked,
     providers,
     apiKeys,
-    targetLanguage: $('#target-language').value,
-    jevKey: $('#jev-key').value.trim(),
-    filterEnabled: $('#filter-enabled').checked,
-    filterRules: rules,
-    filterThreshold: Number($('#filter-threshold').value) / 100,
-    filterDailyLimit: Number($('#filter-limit').value)
+    targetLanguage: $('#target-language').value
   };
 }
 async function saveSettings() {
   if (saving) return; // 重复点击不重复提交
   saving = true;
-  const buttons = [$('#save-main'), $('#save-filter')].filter(Boolean);
+  const buttons = [$('#save-main')];
   buttons.forEach(button => { button.disabled = true; });
   try {
     const payload = await settingsPayload();
-    if (payload.filterEnabled && (!payload.jevKey || !payload.filterRules.some(rule => rule.enabled && rule.text.trim()))) throw new Error('开启筛选前，请填写 Jev Key 并启用至少一条规则。');
     const active = payload.providers[payload.modelProvider];
     if (active?.baseUrl) await ensureOrigin(active.baseUrl);
     const saved = await send('SAVE_SETTINGS', { payload });
@@ -232,13 +182,11 @@ async function saveSettings() {
     }
     renderModelHint();
     setDirty(false); // 保存成功才生效，也才清掉「未保存」标记；失败保留原配置与输入
-    status('已保存。已打开的 X 页面会立即应用新的筛选与写作设置。');
-    refreshJevDiagnostics();
+    status('已保存。已打开的 X 页面会立即应用新设置。');
   } catch (error) { status(error.message, true); }
   finally { saving = false; buttons.forEach(button => { button.disabled = false; }); }
 }
 $('#save-main').onclick = saveSettings;
-$('#save-filter').onclick = saveSettings;
 
 async function loadSaved() {
   try {
@@ -280,11 +228,6 @@ try {
   $('#hover-lookup').checked = settings.hoverLookup !== false;
   $('#active-config').textContent = '当前使用：' + (settings.providers[settings.modelProvider]?.label || settings.modelProvider);
   $('#target-language').value = settings.targetLanguage || '英语';
-  $('#agent-provider').value = settings.agentProvider || DEFAULT_SETTINGS.agentProvider;
-  $('#agent-base-url').value = settings.agentBaseUrl || DEFAULT_SETTINGS.agentBaseUrl;
-  $('#agent-model').value = settings.agentModel || DEFAULT_SETTINGS.agentModel;
-  $('#agent-key').value = data.agentKey || '';
-  $('#agent-model').disabled = false;
   for (const id of Object.keys(providerDrafts)) {
     providerDrafts[id] = {
       label: settings.providers[id].label, kind: settings.providers[id].kind,
@@ -296,15 +239,7 @@ try {
   $('#model-provider').value = settings.modelProvider;
   showProvider(activeProvider());
   renderModelHint();
-  $('#jev-key').value = data.jevKey || '';
-  $('#filter-enabled').checked = Boolean(settings.filterEnabled);
-  $('#filter-threshold').value = Math.round((settings.filterThreshold ?? DEFAULT_SETTINGS.filterThreshold) * 100);
-  $('#threshold-label').textContent = `${$('#filter-threshold').value}%`;
-  $('#filter-limit').value = settings.filterDailyLimit || 80;
-  rules = Array.isArray(settings.filterRules) ? settings.filterRules.map(rule => ({ ...rule })) : [];
-  renderRules();
   $('#glossary-count').textContent = data.glossaryCount ? `已导入 ${data.glossaryCount} 个词条` : '尚未导入本地词表';
-  refreshJevDiagnostics();
 } catch (error) { status(error.message, true); }
 
 // 词典面板：导入状态、进度、取消与索引管理；状态行复用底部 #status
@@ -343,9 +278,9 @@ $('#import-backup').onchange = async event => {
     const archive = JSON.parse(await file.text());
     const counts = await send('BACKUP', { payload: { op: 'preview', archive } });
     importArchive = archive;
-    $('#backup-preview').textContent = '将合并：' + counts.sessions + ' 个帖子会话、' + counts.documents + ' 份文稿、' + counts.drafts + ' 份写作草稿、'
-      + counts.cards + ' 条收藏、' + counts.memories + ' 条学习记录。导入 ' + counts.imported
-      + ' 项、跳过 ' + counts.skipped + ' 项、另存 ' + counts.extra + ' 项。冲突内容另存，不删除原记录。MDX 需重新导入，密钥不迁移。';
+    $('#backup-preview').textContent = '将合并：' + counts.sessions + ' 个帖子会话、' + counts.cards + ' 条收藏、' + counts.phrases + ' 条常用表达。导入 ' + counts.imported
+      + ' 项、跳过 ' + counts.skipped + ' 项、另存 ' + counts.extra + ' 项。冲突内容另存，不删除原记录。MDX 需重新导入，密钥不迁移。'
+      + (counts.unsupported?.length ? ' 备份里的 ' + counts.unsupported.join('、') + ' 属于已不再支持的功能，未导入。' : '');
     $('#confirm-import').hidden = false;
   } catch (error) { status(error.message, true); }
 };
@@ -444,18 +379,3 @@ sessionSearch.addEventListener('input', () => {
 });
 $('#refresh-sessions').onclick = listSessions;
 listSessions();
-
-$('#agent-provider').onchange = () => {
-  $('#agent-base-url').value = 'http://127.0.0.1:4097';
-  $('#agent-model').disabled = false;
-};
-$('#test-agent').onclick = async () => {
-  const version = formVersion;
-  try {
-    if (dirty) throw new Error('请先保存修改，再授权并检测。');
-    $('#agent-connection').textContent = '请完成浏览器授权，正在检测…';
-    await ensureOrigin(safeAgentEndpoint(loadedSettings.agentProvider, loadedSettings.agentBaseUrl));
-    const result = await send('AGENT_STATUS');
-    $('#agent-connection').textContent = version === formVersion ? result.label + ' · ' + result.detail : '配置已改变，已忽略旧检测结果。';
-  } catch (error) { $('#agent-connection').textContent = error.message; }
-};
